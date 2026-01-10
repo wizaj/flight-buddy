@@ -327,6 +327,67 @@ def parse_flight_schedule(response: dict) -> list[FlightSchedule]:
     return schedules
 
 
+def parse_seat_map(response: dict) -> Optional[SeatMap]:
+    """Parse seat map response."""
+    data = response.get("data", [])
+    if not data:
+        return None
+    
+    item = data[0]
+    decks_data = item.get("decks", [])
+    
+    decks = []
+    for deck_data in decks_data:
+        seats_data = deck_data.get("seats", [])
+        deck_seats = []
+        
+        for seat_data in seats_data:
+            # Get availability status
+            traveler_pricing = seat_data.get("travelerPricing", [{}])
+            status = "AVAILABLE"
+            if traveler_pricing:
+                status = traveler_pricing[0].get("seatAvailabilityStatus", "AVAILABLE")
+            
+            available = status == "AVAILABLE"
+            
+            # Get characteristics
+            chars = seat_data.get("characteristicsCodes", [])
+            characteristics = []
+            char_map = {
+                "W": "WINDOW",
+                "A": "AISLE",
+                "1": "RESTRICTED_RECLINE",
+                "E": "EXIT_ROW",
+                "L": "LEG_SPACE",
+                "CH": "CHARGEABLE",
+            }
+            for c in chars:
+                if c in char_map:
+                    characteristics.append(char_map[c])
+            
+            deck_seats.append(Seat(
+                number=seat_data.get("number", ""),
+                available=available,
+                cabin=seat_data.get("cabin", "ECONOMY"),
+                characteristics=characteristics,
+            ))
+        
+        decks.append(deck_seats)
+    
+    dep = item.get("departure", {})
+    arr = item.get("arrival", {})
+    
+    return SeatMap(
+        carrier=item.get("carrierCode", ""),
+        flight_number=item.get("number", ""),
+        aircraft=item.get("aircraft", {}).get("code"),
+        departure=Airport(code=dep.get("iataCode", "")),
+        arrival=Airport(code=arr.get("iataCode", "")),
+        departure_date=dep.get("at", "")[:10] if dep.get("at") else "",
+        decks=decks,
+    )
+
+
 def parse_flight_availability(response: dict) -> list[FlightAvailability]:
     """Parse flight availability response."""
     data = response.get("data", [])

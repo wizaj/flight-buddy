@@ -382,19 +382,19 @@ Requires a flight offer from Flight Offers Search. Returns deck layout with indi
 - [x] Seat Maps (`seats`)
   - [x] Get flight offer first
   - [x] Call seatmaps API
-  - [ ] Parse deck/seat layout (Phase 3)
+  - [x] Parse deck/seat layout
 
-### Phase 3: Output Formatting
-- [ ] Formatter module (`formatter.py`)
-  - [ ] Route search table
-  - [ ] Flight schedule display
-  - [ ] Availability table
-  - [ ] ASCII seat map
-  - [ ] JSON output mode
-- [ ] Rich integration
-  - [ ] Colors and styling
-  - [ ] Tables
-  - [ ] Progress indicators
+### Phase 3: Output Formatting ✅
+- [x] Formatter module (`formatter.py`)
+  - [x] Route search table
+  - [x] Flight schedule display
+  - [x] Availability table
+  - [x] ASCII seat map
+  - [x] JSON output mode
+- [x] Rich integration
+  - [x] Colors and styling
+  - [x] Tables
+  - [x] Progress indicators (not needed for CLI)
 
 ### Phase 4: Polish
 - [ ] Error messages (user-friendly)

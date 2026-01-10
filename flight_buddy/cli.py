@@ -12,11 +12,13 @@ from .models import (
     parse_flight_offers,
     parse_flight_schedule,
     parse_flight_availability,
+    parse_seat_map,
 )
 from .formatter import (
     print_search_results,
     print_flight_schedule,
     print_availability,
+    print_seat_map,
     print_error,
 )
 
@@ -340,13 +342,13 @@ def seats(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
             # Get seat map
             seatmap_response = client.get_seat_map(matching_offer.raw)
         
-        # Parse and display seat map
-        # Note: Seat map parsing is complex, showing simplified message for now
-        from rich.console import Console
-        console = Console()
-        console.print(f"\n✈  [bold]{flight_number.upper()}[/bold]  ·  {sched.departure.code} → {sched.arrival.code}  ·  {parsed_date}")
-        console.print(f"\n[yellow]Seat map data retrieved. Full visualization coming in Phase 3.[/yellow]")
-        console.print(f"[dim]Raw response has {len(seatmap_response.get('data', []))} deck(s)[/dim]\n")
+        seat_map = parse_seat_map(seatmap_response)
+        
+        if not seat_map:
+            print_error(f"No seat map data for {flight_number.upper()}")
+            sys.exit(1)
+        
+        print_seat_map(seat_map, cabin_filter=cabin_filter, as_json=as_json)
         
     except AmadeusError as e:
         print_error(str(e), e.details)
