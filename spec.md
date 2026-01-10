@@ -358,31 +358,31 @@ Requires a flight offer from Flight Offers Search. Returns deck layout with indi
   - [x] Error handling (rate limits, 4xx, 5xx)
   - [x] Response parsing (`models.py`)
 
-### Phase 2: Core Commands
-- [ ] CLI framework (`cli.py`)
-  - [ ] Click app setup
-  - [ ] `search` subcommand
-  - [ ] `flight` subcommand
-  - [ ] `avail` subcommand
-  - [ ] `seats` subcommand
-  - [ ] Global options (`--json`, `--help`)
-- [ ] Flight Offers Search (`search`)
-  - [ ] Build query params from CLI args
-  - [ ] Parse response into model
-  - [ ] Handle cabin class mapping
-  - [ ] Handle airline filters
-- [ ] Flight Schedule (`flight`)
-  - [ ] Parse flight number (EK766 → EK + 766)
-  - [ ] Handle date shortcuts (today, tomorrow)
-  - [ ] Call schedule API
-- [ ] Flight Availability (`avail`)
-  - [ ] Get schedule first (for origin/dest)
-  - [ ] Call availability API
-  - [ ] Parse booking class availability
-- [ ] Seat Maps (`seats`)
-  - [ ] Get flight offer first
-  - [ ] Call seatmaps API
-  - [ ] Parse deck/seat layout
+### Phase 2: Core Commands ✅
+- [x] CLI framework (`cli.py`)
+  - [x] Click app setup
+  - [x] `search` subcommand
+  - [x] `flight` subcommand
+  - [x] `avail` subcommand
+  - [x] `seats` subcommand (API working, visual in Phase 3)
+  - [x] Global options (`--json`, `--help`)
+- [x] Flight Offers Search (`search`)
+  - [x] Build query params from CLI args
+  - [x] Parse response into model
+  - [x] Handle cabin class mapping
+  - [x] Handle airline filters
+- [x] Flight Schedule (`flight`)
+  - [x] Parse flight number (EK766 → EK + 766)
+  - [x] Handle date shortcuts (today, tomorrow)
+  - [x] Call schedule API
+- [x] Flight Availability (`avail`)
+  - [x] Get schedule first (for origin/dest)
+  - [x] Call availability API
+  - [x] Parse booking class availability
+- [x] Seat Maps (`seats`)
+  - [x] Get flight offer first
+  - [x] Call seatmaps API
+  - [ ] Parse deck/seat layout (Phase 3)
 
 ### Phase 3: Output Formatting
 - [ ] Formatter module (`formatter.py`)

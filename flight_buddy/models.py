@@ -220,6 +220,11 @@ class SeatMap:
 
 def parse_datetime(date_str: str) -> datetime:
     """Parse ISO datetime string."""
+    # Strip timezone suffix if present
+    date_str = date_str.rstrip("Z")
+    if "+" in date_str:
+        date_str = date_str.split("+")[0]
+    
     # Handle various formats
     for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"]:
         try:
