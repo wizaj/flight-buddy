@@ -396,12 +396,12 @@ Requires a flight offer from Flight Offers Search. Returns deck layout with indi
   - [x] Tables
   - [x] Progress indicators (not needed for CLI)
 
-### Phase 4: Polish
-- [ ] Error messages (user-friendly)
-- [ ] Help text for all commands
-- [ ] `fb` alias setup instructions
-- [ ] README.md
-- [ ] Basic tests
+### Phase 4: Polish ✅
+- [x] Error messages (user-friendly)
+- [x] Help text for all commands
+- [x] `fb` alias setup instructions
+- [x] README.md
+- [x] Basic tests (9 passing)
 
 ---
 
