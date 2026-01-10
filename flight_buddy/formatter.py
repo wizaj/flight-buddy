@@ -20,6 +20,73 @@ from .models import (
 console = Console()
 
 
+# Common IATA aircraft codes → full names
+AIRCRAFT_CODES = {
+    # Airbus
+    "318": "Airbus A318",
+    "319": "Airbus A319",
+    "320": "Airbus A320",
+    "32A": "Airbus A320 (Sharklets)",
+    "32N": "Airbus A320neo",
+    "321": "Airbus A321",
+    "32Q": "Airbus A321neo",
+    "332": "Airbus A330-200",
+    "333": "Airbus A330-300",
+    "338": "Airbus A330-800neo",
+    "339": "Airbus A330-900neo",
+    "342": "Airbus A340-200",
+    "343": "Airbus A340-300",
+    "345": "Airbus A340-500",
+    "346": "Airbus A340-600",
+    "350": "Airbus A350",
+    "351": "Airbus A350-1000",
+    "359": "Airbus A350-900",
+    "380": "Airbus A380",
+    "388": "Airbus A380-800",
+    # Boeing
+    "737": "Boeing 737",
+    "738": "Boeing 737-800",
+    "739": "Boeing 737-900",
+    "7M8": "Boeing 737 MAX 8",
+    "7M9": "Boeing 737 MAX 9",
+    "744": "Boeing 747-400",
+    "748": "Boeing 747-8",
+    "752": "Boeing 757-200",
+    "753": "Boeing 757-300",
+    "762": "Boeing 767-200",
+    "763": "Boeing 767-300",
+    "764": "Boeing 767-400",
+    "772": "Boeing 777-200",
+    "773": "Boeing 777-300",
+    "77W": "Boeing 777-300ER",
+    "77L": "Boeing 777-200LR",
+    "779": "Boeing 777-9",
+    "787": "Boeing 787",
+    "788": "Boeing 787-8",
+    "789": "Boeing 787-9",
+    "78X": "Boeing 787-10",
+    # Embraer
+    "E70": "Embraer E170",
+    "E75": "Embraer E175",
+    "E90": "Embraer E190",
+    "E95": "Embraer E195",
+    "E2E": "Embraer E195-E2",
+    # Other
+    "AT7": "ATR 72",
+    "DH4": "Dash 8-400",
+    "CR9": "CRJ-900",
+    "CRJ": "CRJ",
+}
+
+
+def get_aircraft_name(code: Optional[str]) -> Optional[str]:
+    """Get full aircraft name from IATA code."""
+    if not code:
+        return None
+    # Check lookup table, fallback to code itself if already a full name
+    return AIRCRAFT_CODES.get(code.upper(), code)
+
+
 def format_duration(iso_duration: str) -> str:
     """Convert ISO duration (PT8H30M) to human readable (8h30m)."""
     if not iso_duration:
@@ -101,6 +168,10 @@ def _print_offer(offer: FlightOffer):
     # Get carrier name from first segment
     carrier_name = itin.segments[0].carrier_name or itin.segments[0].carrier
     
+    # Get aircraft (first segment, or combine if different)
+    aircraft_list = [seg.aircraft for seg in itin.segments if seg.aircraft]
+    aircraft = get_aircraft_name(aircraft_list[0]) if aircraft_list else None
+    
     # Times
     dep_time = format_time(itin.departure_time)
     arr_time = format_time(itin.arrival_time)
@@ -122,7 +193,8 @@ def _print_offer(offer: FlightOffer):
     # Print
     console.print(f"[bold]{carrier_name}[/bold] [dim]{flights}[/dim]")
     console.print(f"  {dep_time} → {arr_time}  ·  {duration}  ·  {stops_str}")
-    console.print(f"  {cabin}  ·  [green bold]{offer.price}[/green bold]")
+    equipment_str = f"  ·  [dim]{aircraft}[/dim]" if aircraft else ""
+    console.print(f"  {cabin}  ·  [green bold]{offer.price}[/green bold]{equipment_str}")
     console.print()
 
 
@@ -146,6 +218,7 @@ def _offer_to_dict(offer: FlightOffer) -> dict:
                     },
                     "duration": seg.duration,
                     "cabin": seg.cabin,
+                    "aircraft": seg.aircraft,
                 }
                 for seg in offer.outbound.segments
             ],
@@ -194,17 +267,19 @@ def _print_schedule(sched: FlightSchedule, date: str):
     console.print(f"\n✈  [bold]{sched.flight_code}[/bold]  ·  {carrier_name}  ·  {date}\n")
     console.print(f"  [bold]{sched.departure.code}[/bold]  {dep_time}  {'─' * 20}  [bold]{sched.arrival.code}[/bold]  {arr_time}")
     
-    # Details
-    details = []
+    # Details line 1: Duration
     if duration:
-        details.append(f"Duration: {duration}")
-    if sched.aircraft:
-        details.append(f"Aircraft: {sched.aircraft}")
-    if sched.status:
-        details.append(f"Status: {sched.status}")
+        console.print(f"  [dim]Duration: {duration}[/dim]")
     
-    if details:
-        console.print(f"  [dim]{' · '.join(details)}[/dim]")
+    # Details line 2: Aircraft
+    if sched.aircraft:
+        aircraft_name = get_aircraft_name(sched.aircraft)
+        console.print(f"  [cyan]Aircraft: {aircraft_name}[/cyan]")
+    
+    # Status if available
+    if sched.status:
+        console.print(f"  [dim]Status: {sched.status}[/dim]")
+    
     console.print()
 
 

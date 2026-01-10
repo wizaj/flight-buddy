@@ -301,9 +301,14 @@ def parse_flight_schedule(response: dict) -> list[FlightSchedule]:
         
         segments = item.get("segments", [{}])
         segment = segments[0] if segments else {}
+        legs = item.get("legs", [{}])
+        leg = legs[0] if legs else {}
         
         dep_time_data = dep.get("departure", {})
         arr_time_data = arr.get("arrival", {})
+        
+        # Aircraft is in legs[].aircraftEquipment.aircraftType
+        aircraft = leg.get("aircraftEquipment", {}).get("aircraftType")
         
         schedules.append(FlightSchedule(
             carrier=item.get("flightDesignator", {}).get("carrierCode", ""),
@@ -320,7 +325,7 @@ def parse_flight_schedule(response: dict) -> list[FlightSchedule]:
             ),
             arrival_time=parse_datetime(arr_time_data.get("timings", [{}])[0].get("value", "")),
             duration=segment.get("scheduledSegmentDuration", ""),
-            aircraft=segment.get("partnership", {}).get("operatingFlight", {}).get("aircraftType"),
+            aircraft=aircraft,
             status=item.get("status"),
         ))
     
