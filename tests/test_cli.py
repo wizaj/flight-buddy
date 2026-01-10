@@ -3,7 +3,7 @@
 import pytest
 from click.testing import CliRunner
 
-from flight_buddy.cli import cli, parse_cabin, parse_date, parse_flight_number
+from app.cli import cli, parse_cabin, parse_date, parse_flight_number
 
 
 class TestHelpers:

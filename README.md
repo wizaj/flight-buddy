@@ -24,13 +24,13 @@ cp .env.example .env
 Add to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-alias fb='python -m flight_buddy'
+alias fb='python -m app'
 ```
 
 Or for the full path:
 
 ```bash
-alias fb='/path/to/flight-buddy/venv/bin/python -m flight_buddy'
+alias fb='/path/to/flight-buddy/venv/bin/python -m app'
 ```
 
 Then reload: `source ~/.bashrc`

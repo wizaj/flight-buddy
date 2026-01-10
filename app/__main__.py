@@ -1,4 +1,4 @@
-"""Allow running as `python -m flight_buddy`."""
+"""Allow running as `python -m app`."""
 
 from .cli import main
 

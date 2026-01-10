@@ -347,7 +347,7 @@ Requires a flight offer from Flight Offers Search. Returns deck layout with indi
 ### Phase 1: Foundation ✅
 - [x] Project setup
   - [x] Create `requirements.txt`
-  - [x] Create package structure (`flight_buddy/`)
+  - [x] Create package structure (`app/`)
   - [ ] Set up `pyproject.toml` or `setup.py`
 - [x] Auth module (`auth.py`)
   - [x] OAuth2 token fetch
@@ -415,7 +415,7 @@ flight-buddy/
 ├── .gitignore
 ├── spec.md              # This file
 ├── requirements.txt     # Python deps
-├── flight_buddy/
+├── app/
 │   ├── __init__.py
 │   ├── cli.py           # CLI entry point (argparse/click)
 │   ├── client.py        # Amadeus API client
@@ -455,10 +455,10 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Run
-python -m flight_buddy JNB DXB 2026-02-01
+python -m app JNB DXB 2026-02-01
 
 # Or with alias
-alias fb='python -m flight_buddy'
+alias fb='python -m app'
 fb JNB DXB 2026-02-01 -c J
 ```
 
