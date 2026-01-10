@@ -342,6 +342,69 @@ Requires a flight offer from Flight Offers Search. Returns deck layout with indi
 
 ---
 
+## Implementation Checklist
+
+### Phase 1: Foundation
+- [ ] Project setup
+  - [ ] Create `requirements.txt`
+  - [ ] Create package structure (`flight_buddy/`)
+  - [ ] Set up `pyproject.toml` or `setup.py`
+- [ ] Auth module (`auth.py`)
+  - [ ] OAuth2 token fetch
+  - [ ] Token caching (avoid re-auth every call)
+  - [ ] Token refresh on expiry
+- [ ] API client (`client.py`)
+  - [ ] Base HTTP client with auth headers
+  - [ ] Error handling (rate limits, 4xx, 5xx)
+  - [ ] Response parsing
+
+### Phase 2: Core Commands
+- [ ] CLI framework (`cli.py`)
+  - [ ] Click app setup
+  - [ ] `search` subcommand
+  - [ ] `flight` subcommand
+  - [ ] `avail` subcommand
+  - [ ] `seats` subcommand
+  - [ ] Global options (`--json`, `--help`)
+- [ ] Flight Offers Search (`search`)
+  - [ ] Build query params from CLI args
+  - [ ] Parse response into model
+  - [ ] Handle cabin class mapping
+  - [ ] Handle airline filters
+- [ ] Flight Schedule (`flight`)
+  - [ ] Parse flight number (EK766 → EK + 766)
+  - [ ] Handle date shortcuts (today, tomorrow)
+  - [ ] Call schedule API
+- [ ] Flight Availability (`avail`)
+  - [ ] Get schedule first (for origin/dest)
+  - [ ] Call availability API
+  - [ ] Parse booking class availability
+- [ ] Seat Maps (`seats`)
+  - [ ] Get flight offer first
+  - [ ] Call seatmaps API
+  - [ ] Parse deck/seat layout
+
+### Phase 3: Output Formatting
+- [ ] Formatter module (`formatter.py`)
+  - [ ] Route search table
+  - [ ] Flight schedule display
+  - [ ] Availability table
+  - [ ] ASCII seat map
+  - [ ] JSON output mode
+- [ ] Rich integration
+  - [ ] Colors and styling
+  - [ ] Tables
+  - [ ] Progress indicators
+
+### Phase 4: Polish
+- [ ] Error messages (user-friendly)
+- [ ] Help text for all commands
+- [ ] `fb` alias setup instructions
+- [ ] README.md
+- [ ] Basic tests
+
+---
+
 ## Technical Design
 
 ### Project Structure
