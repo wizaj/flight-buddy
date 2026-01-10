@@ -92,7 +92,7 @@ class AmadeusClient:
         airlines: Optional[list[str]] = None,
         exclude_airlines: Optional[list[str]] = None,
         max_results: int = 10,
-        currency: Optional[str] = None,
+        currency: str = "USD",
     ) -> dict:
         """
         Search for flight offers.
@@ -107,7 +107,7 @@ class AmadeusClient:
             airlines: Include only these airlines (IATA codes)
             exclude_airlines: Exclude these airlines
             max_results: Maximum number of results
-            currency: Currency code for prices
+            currency: Currency code for prices (default: USD)
         
         Returns:
             API response with flight offers
