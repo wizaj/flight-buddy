@@ -344,19 +344,19 @@ Requires a flight offer from Flight Offers Search. Returns deck layout with indi
 
 ## Implementation Checklist
 
-### Phase 1: Foundation
-- [ ] Project setup
-  - [ ] Create `requirements.txt`
-  - [ ] Create package structure (`flight_buddy/`)
+### Phase 1: Foundation ✅
+- [x] Project setup
+  - [x] Create `requirements.txt`
+  - [x] Create package structure (`flight_buddy/`)
   - [ ] Set up `pyproject.toml` or `setup.py`
-- [ ] Auth module (`auth.py`)
-  - [ ] OAuth2 token fetch
-  - [ ] Token caching (avoid re-auth every call)
-  - [ ] Token refresh on expiry
-- [ ] API client (`client.py`)
-  - [ ] Base HTTP client with auth headers
-  - [ ] Error handling (rate limits, 4xx, 5xx)
-  - [ ] Response parsing
+- [x] Auth module (`auth.py`)
+  - [x] OAuth2 token fetch
+  - [x] Token caching (avoid re-auth every call)
+  - [x] Token refresh on expiry
+- [x] API client (`client.py`)
+  - [x] Base HTTP client with auth headers
+  - [x] Error handling (rate limits, 4xx, 5xx)
+  - [x] Response parsing (`models.py`)
 
 ### Phase 2: Core Commands
 - [ ] CLI framework (`cli.py`)
