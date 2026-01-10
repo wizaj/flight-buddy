@@ -455,10 +455,10 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Run
-python -m app JNB DXB 2026-02-01
+python -m src JNB DXB 2026-02-01
 
 # Or with alias
-alias fb='python -m app'
+alias fb='python -m src'
 fb JNB DXB 2026-02-01 -c J
 ```
 
