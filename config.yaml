@@ -1,0 +1,27 @@
+# Flight Buddy Configuration
+# Provider selection and settings
+
+# Active provider: "amadeus", "serpapi", or "duffel"
+provider: serpapi
+
+# Amadeus API settings
+amadeus:
+  # API environment (use api.amadeus.com for production)
+  base_url: https://test.api.amadeus.com
+  # Credentials in .env: AMADEUS_API_KEY, AMADEUS_API_SECRET
+
+# SerpApi settings (Google Flights scraper)
+serpapi:
+  # No need to change base_url
+  base_url: https://serpapi.com
+  # Credentials in .env: SERPAPI_API_KEY
+
+# Duffel API settings (future)
+duffel:
+  base_url: https://api.duffel.com
+  # Credentials in .env: DUFFEL_ACCESS_TOKEN
+
+# Default search parameters
+defaults:
+  currency: USD
+  max_results: 10

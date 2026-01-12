@@ -7,13 +7,7 @@ from typing import Optional
 
 import click
 
-from .client import AmadeusClient, AmadeusError
-from .models import (
-    parse_flight_offers,
-    parse_flight_schedule,
-    parse_flight_availability,
-    parse_seat_map,
-)
+from .providers import get_provider, ProviderError
 from .formatter import (
     print_search_results,
     print_flight_schedule,
@@ -79,9 +73,13 @@ def parse_flight_number(flight: str) -> tuple[str, str]:
 
 @click.group()
 @click.version_option(package_name="flight-buddy")
-def cli():
+@click.option("-p", "--provider", envvar="FLIGHT_BUDDY_PROVIDER", 
+              help="Provider (amadeus/duffel). Default from config.yaml")
+@click.pass_context
+def cli(ctx, provider: Optional[str]):
     """✈ Flight Buddy - Quick flight lookups from the command line."""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["provider"] = provider
 
 
 # ─────────────────────────────────────────────────────────────
@@ -100,7 +98,9 @@ def cli():
 @click.option("-m", "--max", "max_results", default=10, help="Max results")
 @click.option("--currency", default="USD", help="Currency code")
 @click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+@click.pass_context
 def search(
+    ctx,
     origin: str,
     destination: str,
     date: str,
@@ -129,8 +129,8 @@ def search(
         airlines = [a.strip().upper() for a in airline.split(",")] if airline else None
         exclude_airlines = [a.strip().upper() for a in exclude.split(",")] if exclude else None
         
-        with AmadeusClient() as client:
-            response = client.search_flights(
+        with get_provider(ctx.obj.get("provider")) as provider:
+            offers = provider.search_flights(
                 origin=origin,
                 destination=destination,
                 departure_date=parsed_date,
@@ -143,7 +143,6 @@ def search(
                 currency=currency,
             )
         
-        offers = parse_flight_offers(response)
         print_search_results(
             offers,
             origin=origin.upper(),
@@ -154,7 +153,7 @@ def search(
             as_json=as_json,
         )
         
-    except AmadeusError as e:
+    except ProviderError as e:
         print_error(str(e), e.details)
         sys.exit(1)
 
@@ -167,7 +166,8 @@ def search(
 @click.argument("flight_number")
 @click.argument("date", default="today")
 @click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
-def flight(flight_number: str, date: str, as_json: bool):
+@click.pass_context
+def flight(ctx, flight_number: str, date: str, as_json: bool):
     """Look up a flight by number.
     
     Examples:
@@ -182,14 +182,13 @@ def flight(flight_number: str, date: str, as_json: bool):
         carrier, number = parse_flight_number(flight_number)
         parsed_date = parse_date(date)
         
-        with AmadeusClient() as client:
-            response = client.get_flight_schedule(
+        with get_provider(ctx.obj.get("provider")) as provider:
+            schedules = provider.get_flight_schedule(
                 carrier_code=carrier,
                 flight_number=number,
                 departure_date=parsed_date,
             )
         
-        schedules = parse_flight_schedule(response)
         print_flight_schedule(
             schedules,
             flight_code=flight_number.upper(),
@@ -197,7 +196,7 @@ def flight(flight_number: str, date: str, as_json: bool):
             as_json=as_json,
         )
         
-    except AmadeusError as e:
+    except ProviderError as e:
         print_error(str(e), e.details)
         sys.exit(1)
 
@@ -211,7 +210,8 @@ def flight(flight_number: str, date: str, as_json: bool):
 @click.argument("date", default="today")
 @click.option("-c", "--cabin", help="Filter cabin class")
 @click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
-def avail(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
+@click.pass_context
+def avail(ctx, flight_number: str, date: str, cabin: Optional[str], as_json: bool):
     """Check seat availability by cabin class.
     
     Examples:
@@ -228,14 +228,13 @@ def avail(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
         cabin_filter = parse_cabin(cabin)
         
         # First get flight schedule to know origin/destination
-        with AmadeusClient() as client:
+        with get_provider(ctx.obj.get("provider")) as provider:
             # Get schedule first
-            sched_response = client.get_flight_schedule(
+            schedules = provider.get_flight_schedule(
                 carrier_code=carrier,
                 flight_number=number,
                 departure_date=parsed_date,
             )
-            schedules = parse_flight_schedule(sched_response)
             
             if not schedules:
                 print_error(f"Flight {flight_number.upper()} not found on {parsed_date}")
@@ -244,15 +243,13 @@ def avail(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
             sched = schedules[0]
             
             # Get availability
-            avail_response = client.get_flight_availability(
+            availabilities = provider.get_flight_availability(
                 origin=sched.departure.code,
                 destination=sched.arrival.code,
                 departure_date=parsed_date,
                 carrier_code=carrier,
                 flight_number=number,
             )
-        
-        availabilities = parse_flight_availability(avail_response)
         
         # Filter to just the requested flight
         target_flight = f"{carrier}{number}"
@@ -270,7 +267,7 @@ def avail(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
             as_json=as_json,
         )
         
-    except AmadeusError as e:
+    except ProviderError as e:
         print_error(str(e), e.details)
         sys.exit(1)
 
@@ -284,7 +281,8 @@ def avail(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
 @click.argument("date", default="today")
 @click.option("-c", "--cabin", help="Filter cabin class")
 @click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
-def seats(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
+@click.pass_context
+def seats(ctx, flight_number: str, date: str, cabin: Optional[str], as_json: bool):
     """Show seat map for a flight.
     
     Examples:
@@ -298,15 +296,13 @@ def seats(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
         parsed_date = parse_date(date)
         cabin_filter = parse_cabin(cabin)
         
-        with AmadeusClient() as client:
-            # Search for this specific flight to get offer
-            # We need origin/destination first from schedule
-            sched_response = client.get_flight_schedule(
+        with get_provider(ctx.obj.get("provider")) as provider:
+            # Get schedule to find origin/destination
+            schedules = provider.get_flight_schedule(
                 carrier_code=carrier,
                 flight_number=number,
                 departure_date=parsed_date,
             )
-            schedules = parse_flight_schedule(sched_response)
             
             if not schedules:
                 print_error(f"Flight {flight_number.upper()} not found on {parsed_date}")
@@ -314,35 +310,14 @@ def seats(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
             
             sched = schedules[0]
             
-            # Search for flight offers on this route
-            search_response = client.search_flights(
+            # Get seat map
+            seat_map = provider.get_seat_map(
+                carrier_code=carrier,
+                flight_number=number,
+                departure_date=parsed_date,
                 origin=sched.departure.code,
                 destination=sched.arrival.code,
-                departure_date=parsed_date,
-                max_results=50,  # Get more to find our flight
             )
-            
-            offers = parse_flight_offers(search_response)
-            
-            # Find offer matching our flight
-            target_flight = f"{carrier}{number}"
-            matching_offer = None
-            for offer in offers:
-                for seg in offer.outbound.segments:
-                    if seg.flight_code == target_flight:
-                        matching_offer = offer
-                        break
-                if matching_offer:
-                    break
-            
-            if not matching_offer:
-                print_error(f"Could not find bookable offer for {target_flight}")
-                sys.exit(1)
-            
-            # Get seat map
-            seatmap_response = client.get_seat_map(matching_offer.raw)
-        
-        seat_map = parse_seat_map(seatmap_response)
         
         if not seat_map:
             print_error(f"No seat map data for {flight_number.upper()}")
@@ -350,7 +325,7 @@ def seats(flight_number: str, date: str, cabin: Optional[str], as_json: bool):
         
         print_seat_map(seat_map, cabin_filter=cabin_filter, as_json=as_json)
         
-    except AmadeusError as e:
+    except ProviderError as e:
         print_error(str(e), e.details)
         sys.exit(1)
 

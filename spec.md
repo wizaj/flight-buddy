@@ -411,18 +411,119 @@ Requires a flight offer from Flight Offers Search. Returns deck layout with indi
 
 ```
 flight-buddy/
-├── .env                 # API credentials
+├── config.yaml          # Provider config
+├── .env                 # API credentials (secrets only)
 ├── .gitignore
 ├── spec.md              # This file
 ├── requirements.txt     # Python deps
-├── app/
+├── src/
 │   ├── __init__.py
-│   ├── cli.py           # CLI entry point (argparse/click)
-│   ├── client.py        # Amadeus API client
-│   ├── auth.py          # OAuth token management
-│   ├── models.py        # Response parsing
-│   └── formatter.py     # Output formatting
+│   ├── cli.py           # CLI entry point
+│   ├── config.py        # Config loader
+│   ├── models.py        # Provider-agnostic data models
+│   ├── formatter.py     # Output formatting
+│   └── providers/
+│       ├── __init__.py
+│       ├── base.py      # Abstract provider interface
+│       ├── amadeus/
+│       │   ├── __init__.py
+│       │   ├── adapter.py   # Amadeus implementation
+│       │   ├── auth.py      # OAuth token management
+│       │   └── parser.py    # Amadeus response parsing
+│       └── duffel/
+│           ├── __init__.py
+│           ├── adapter.py   # Duffel implementation (future)
+│           └── parser.py    # Duffel response parsing
 └── tests/
+```
+
+### Provider Configuration
+
+```yaml
+# config.yaml
+provider: amadeus  # or "duffel"
+
+amadeus:
+  base_url: https://test.api.amadeus.com  # or api.amadeus.com for prod
+  # Credentials in .env: AMADEUS_API_KEY, AMADEUS_API_SECRET
+
+duffel:
+  base_url: https://api.duffel.com
+  # Credentials in .env: DUFFEL_ACCESS_TOKEN
+
+# Optional defaults
+defaults:
+  currency: USD
+  max_results: 10
+```
+
+### Provider Interface
+
+```python
+# providers/base.py
+from abc import ABC, abstractmethod
+from typing import Optional
+from ..models import FlightOffer, FlightSchedule, FlightAvailability, SeatMap
+
+class FlightProvider(ABC):
+    """Abstract interface for flight data providers."""
+    
+    @abstractmethod
+    def search_flights(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        adults: int = 1,
+        cabin: Optional[str] = None,
+        non_stop: bool = False,
+        airlines: Optional[list[str]] = None,
+        exclude_airlines: Optional[list[str]] = None,
+        max_results: int = 10,
+        currency: str = "USD",
+    ) -> list[FlightOffer]:
+        """Search for flight offers."""
+        pass
+    
+    @abstractmethod
+    def get_flight_schedule(
+        self,
+        carrier_code: str,
+        flight_number: str,
+        departure_date: str,
+    ) -> list[FlightSchedule]:
+        """Get flight schedule by flight number."""
+        pass
+    
+    @abstractmethod
+    def get_flight_availability(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        departure_time: Optional[str] = None,
+        carrier_code: Optional[str] = None,
+        flight_number: Optional[str] = None,
+    ) -> list[FlightAvailability]:
+        """Get seat availability by cabin class."""
+        pass
+    
+    @abstractmethod
+    def get_seat_map(
+        self,
+        carrier_code: str,
+        flight_number: str,
+        departure_date: str,
+        origin: str,
+        destination: str,
+    ) -> Optional[SeatMap]:
+        """Get seat map for a flight."""
+        pass
+    
+    @abstractmethod
+    def close(self) -> None:
+        """Close connections."""
+        pass
 ```
 
 ### Dependencies
@@ -432,15 +533,18 @@ httpx          # HTTP client (async support)
 python-dotenv  # .env loading  
 rich           # Terminal formatting
 click          # CLI framework
+pyyaml         # Config file parsing
 ```
 
 ### Environment
 
 ```bash
-# .env
+# .env (secrets only)
 AMADEUS_API_KEY=xxx
 AMADEUS_API_SECRET=xxx
-AMADEUS_BASE_URL=https://test.api.amadeus.com  # or api.amadeus.com for prod
+
+# Future: Duffel
+DUFFEL_ACCESS_TOKEN=xxx
 ```
 
 ---
