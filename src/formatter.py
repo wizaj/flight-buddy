@@ -15,6 +15,7 @@ from .models import (
     FlightAvailability,
     SeatMap,
     Seat,
+    Itinerary,
 )
 
 console = Console()
@@ -124,6 +125,7 @@ def print_search_results(
     origin: str,
     destination: str,
     date: str,
+    return_date: Optional[str] = None,
     cabin: Optional[str] = None,
     adults: int = 1,
     as_json: bool = False,
@@ -135,6 +137,7 @@ def print_search_results(
                 "origin": origin,
                 "destination": destination,
                 "date": date,
+                "return_date": return_date,
                 "cabin": cabin,
                 "adults": adults,
             },
@@ -145,39 +148,96 @@ def print_search_results(
     # Header
     cabin_str = f"  ·  {cabin}" if cabin else ""
     adults_str = f"{adults} adult{'s' if adults > 1 else ''}"
-    console.print(f"\n✈  [bold]{origin} → {destination}[/bold]  ·  {date}  ·  {adults_str}{cabin_str}\n")
+    trip_type = "Round-trip" if return_date else "One-way"
+    date_str = f"{date} → {return_date}" if return_date else date
+    console.print(f"\n✈  [bold]{origin} ↔ {destination}[/bold]  ·  {date_str}  ·  {trip_type}  ·  {adults_str}{cabin_str}\n")
     
     if not offers:
         console.print("[yellow]No flights found[/yellow]")
         return
     
     for offer in offers:
-        _print_offer(offer)
+        _print_offer(offer, is_round_trip=bool(return_date))
     
     console.print(f"\n[dim]{'─' * 50}[/dim]")
     console.print(f"[dim]Showing {len(offers)} results  ·  Prices include taxes[/dim]\n")
 
 
-def _print_offer(offer: FlightOffer):
+def _print_offer(offer: FlightOffer, is_round_trip: bool = False):
     """Print a single flight offer."""
-    itin = offer.outbound
     
+    # For round-trip with multiple itineraries
+    if is_round_trip and len(offer.itineraries) >= 2:
+        outbound = offer.itineraries[0]
+        inbound = offer.itineraries[1]
+        
+        # Get carrier name from first segment
+        carrier_name = outbound.segments[0].carrier_name or outbound.segments[0].carrier
+        
+        # Cabin
+        cabin = offer.cabin or "Economy"
+        
+        # Print header with price
+        console.print(f"[bold]{carrier_name}[/bold]  ·  {cabin}  ·  [green bold]{offer.price}[/green bold]")
+        
+        # Print outbound
+        _print_itinerary_line(outbound, "OUT")
+        
+        # Print return
+        _print_itinerary_line(inbound, "RET")
+        
+        console.print()
+    else:
+        # One-way or single itinerary
+        itin = offer.outbound
+        
+        # Build flight codes
+        flights = " → ".join(seg.flight_code for seg in itin.segments)
+        
+        # Get carrier name from first segment
+        carrier_name = itin.segments[0].carrier_name or itin.segments[0].carrier
+        
+        # Get aircraft (first segment, or combine if different)
+        aircraft_list = [seg.aircraft for seg in itin.segments if seg.aircraft]
+        aircraft = get_aircraft_name(aircraft_list[0]) if aircraft_list else None
+        
+        # Times
+        dep_time = format_time(itin.departure_time)
+        arr_time = format_time(itin.arrival_time)
+        day_change = day_diff(itin.departure_time, itin.arrival_time)
+        if day_change:
+            arr_time = f"{arr_time} ({day_change})"
+        
+        # Duration and stops
+        duration = format_duration(itin.duration)
+        if itin.is_direct:
+            stops_str = "Direct"
+        else:
+            stop_codes = [seg.arrival.code for seg in itin.segments[:-1]]
+            stops_str = f"{itin.stops} stop{'s' if itin.stops > 1 else ''} {', '.join(stop_codes)}"
+        
+        # Cabin
+        cabin = offer.cabin or "Economy"
+        
+        # Print
+        console.print(f"[bold]{carrier_name}[/bold] [dim]{flights}[/dim]")
+        console.print(f"  {dep_time} → {arr_time}  ·  {duration}  ·  {stops_str}")
+        equipment_str = f"  ·  [dim]{aircraft}[/dim]" if aircraft else ""
+        console.print(f"  {cabin}  ·  [green bold]{offer.price}[/green bold]{equipment_str}")
+        console.print()
+
+
+def _print_itinerary_line(itin: Itinerary, label: str):
+    """Print a single itinerary line for round-trip display."""
     # Build flight codes
     flights = " → ".join(seg.flight_code for seg in itin.segments)
-    
-    # Get carrier name from first segment
-    carrier_name = itin.segments[0].carrier_name or itin.segments[0].carrier
-    
-    # Get aircraft (first segment, or combine if different)
-    aircraft_list = [seg.aircraft for seg in itin.segments if seg.aircraft]
-    aircraft = get_aircraft_name(aircraft_list[0]) if aircraft_list else None
     
     # Times
     dep_time = format_time(itin.departure_time)
     arr_time = format_time(itin.arrival_time)
     day_change = day_diff(itin.departure_time, itin.arrival_time)
     if day_change:
-        arr_time = f"{arr_time} ({day_change})"
+        arr_time = f"{arr_time}({day_change})"
     
     # Duration and stops
     duration = format_duration(itin.duration)
@@ -185,25 +245,22 @@ def _print_offer(offer: FlightOffer):
         stops_str = "Direct"
     else:
         stop_codes = [seg.arrival.code for seg in itin.segments[:-1]]
-        stops_str = f"{itin.stops} stop{'s' if itin.stops > 1 else ''} {', '.join(stop_codes)}"
+        stops_str = f"{itin.stops}stop {','.join(stop_codes)}"
     
-    # Cabin
-    cabin = offer.cabin or "Economy"
+    # Route
+    route = f"{itin.origin.code}→{itin.destination.code}"
     
-    # Print
-    console.print(f"[bold]{carrier_name}[/bold] [dim]{flights}[/dim]")
-    console.print(f"  {dep_time} → {arr_time}  ·  {duration}  ·  {stops_str}")
-    equipment_str = f"  ·  [dim]{aircraft}[/dim]" if aircraft else ""
-    console.print(f"  {cabin}  ·  [green bold]{offer.price}[/green bold]{equipment_str}")
-    console.print()
+    # Date
+    date_str = itin.departure_time.strftime("%d %b")
+    
+    console.print(f"  [dim]{label}[/dim] {date_str}  {route}  {dep_time}→{arr_time}  {duration}  {stops_str}  [dim]{flights}[/dim]")
 
 
 def _offer_to_dict(offer: FlightOffer) -> dict:
     """Convert offer to JSON-serializable dict."""
-    return {
-        "price": {"amount": offer.price.amount, "currency": offer.price.currency},
-        "itinerary": {
-            "duration": offer.outbound.duration,
+    def itinerary_to_dict(itin: Itinerary) -> dict:
+        return {
+            "duration": itin.duration,
             "segments": [
                 {
                     "flight": seg.flight_code,
@@ -220,10 +277,20 @@ def _offer_to_dict(offer: FlightOffer) -> dict:
                     "cabin": seg.cabin,
                     "aircraft": seg.aircraft,
                 }
-                for seg in offer.outbound.segments
+                for seg in itin.segments
             ],
-        },
+        }
+    
+    result = {
+        "price": {"amount": offer.price.amount, "currency": offer.price.currency},
     }
+    
+    if len(offer.itineraries) == 1:
+        result["itinerary"] = itinerary_to_dict(offer.outbound)
+    else:
+        result["itineraries"] = [itinerary_to_dict(itin) for itin in offer.itineraries]
+    
+    return result
 
 
 # ─────────────────────────────────────────────────────────────

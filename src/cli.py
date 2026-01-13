@@ -90,6 +90,7 @@ def cli(ctx, provider: Optional[str]):
 @click.argument("origin")
 @click.argument("destination")
 @click.argument("date")
+@click.option("-r", "--return", "return_date", help="Return date (for round-trip)")
 @click.option("-c", "--cabin", help="Cabin class (economy/Y, premium/W, business/J, first/F)")
 @click.option("-a", "--adults", default=1, help="Number of adults (1-9)")
 @click.option("-d", "--direct", is_flag=True, help="Direct flights only")
@@ -104,6 +105,7 @@ def search(
     origin: str,
     destination: str,
     date: str,
+    return_date: Optional[str],
     cabin: Optional[str],
     adults: int,
     direct: bool,
@@ -119,12 +121,15 @@ def search(
     
         fb search JNB DXB 2026-02-01
         
+        fb search JNB DXB 2026-02-01 --return 2026-02-08
+        
         fb search JNB DXB tomorrow --cabin business
         
         fb search JNB DXB 2026-02-01 -c J -d --airline EK,QR
     """
     try:
         parsed_date = parse_date(date)
+        parsed_return = parse_date(return_date) if return_date else None
         parsed_cabin = parse_cabin(cabin)
         airlines = [a.strip().upper() for a in airline.split(",")] if airline else None
         exclude_airlines = [a.strip().upper() for a in exclude.split(",")] if exclude else None
@@ -134,6 +139,7 @@ def search(
                 origin=origin,
                 destination=destination,
                 departure_date=parsed_date,
+                return_date=parsed_return,
                 adults=adults,
                 cabin=parsed_cabin,
                 non_stop=direct,
@@ -148,6 +154,7 @@ def search(
             origin=origin.upper(),
             destination=destination.upper(),
             date=parsed_date,
+            return_date=parsed_return,
             cabin=parsed_cabin,
             adults=adults,
             as_json=as_json,

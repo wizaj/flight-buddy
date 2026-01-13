@@ -34,6 +34,7 @@ class FlightProvider(ABC):
         origin: str,
         destination: str,
         departure_date: str,
+        return_date: Optional[str] = None,
         adults: int = 1,
         cabin: Optional[str] = None,
         non_stop: bool = False,
@@ -48,6 +49,7 @@ class FlightProvider(ABC):
             origin: Origin airport IATA code
             destination: Destination airport IATA code
             departure_date: Date in YYYY-MM-DD format
+            return_date: Return date for round-trip (YYYY-MM-DD, optional)
             adults: Number of adult passengers (1-9)
             cabin: Cabin class (ECONOMY, PREMIUM_ECONOMY, BUSINESS, FIRST)
             non_stop: Only direct flights

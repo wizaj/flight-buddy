@@ -92,6 +92,7 @@ class SerpApiProvider(FlightProvider):
         origin: str,
         destination: str,
         departure_date: str,
+        return_date: Optional[str] = None,
         adults: int = 1,
         cabin: Optional[str] = None,
         non_stop: bool = False,
@@ -102,14 +103,21 @@ class SerpApiProvider(FlightProvider):
     ) -> list[FlightOffer]:
         """Search for flights via Google Flights."""
         
+        # Type 1 = round-trip, Type 2 = one-way
+        flight_type = 1 if return_date else 2
+        
         params = {
             "departure_id": origin.upper(),
             "arrival_id": destination.upper(),
             "outbound_date": departure_date,
-            "type": 2,  # One-way
+            "type": flight_type,
             "adults": adults,
             "currency": currency,
         }
+        
+        # Add return date for round-trip
+        if return_date:
+            params["return_date"] = return_date
         
         # Map cabin class and store for later
         requested_cabin = "ECONOMY"  # Default
@@ -136,40 +144,99 @@ class SerpApiProvider(FlightProvider):
         all_flights = data.get("best_flights", []) + data.get("other_flights", [])
         
         offers = []
-        for i, flight_data in enumerate(all_flights[:max_results]):
-            try:
-                offer = self._parse_flight_offer(flight_data, currency, i, requested_cabin)
-                offers.append(offer)
-            except Exception as e:
-                # Skip malformed results
-                continue
+        
+        if return_date:
+            # Round-trip: need to fetch return options for each outbound
+            # Limit to top N to avoid excessive API calls
+            max_outbound = min(max_results, 5)  # Cap outbound options
+            
+            for i, outbound_data in enumerate(all_flights[:max_outbound]):
+                try:
+                    departure_token = outbound_data.get("departure_token")
+                    if not departure_token:
+                        continue
+                    
+                    # Fetch return options for this outbound
+                    return_params = {
+                        **params,
+                        "departure_token": departure_token,
+                    }
+                    return_data = self._request(return_params)
+                    
+                    # Get return flights (usually in other_flights when using departure_token)
+                    return_flights = return_data.get("best_flights", []) + return_data.get("other_flights", [])
+                    
+                    if return_flights:
+                        # Take best return option for this outbound
+                        best_return = return_flights[0]
+                        offer = self._parse_round_trip_offer(
+                            outbound_data, best_return, currency, i, requested_cabin
+                        )
+                        offers.append(offer)
+                except Exception as e:
+                    # Skip malformed results
+                    continue
+        else:
+            # One-way: original logic
+            for i, flight_data in enumerate(all_flights[:max_results]):
+                try:
+                    offer = self._parse_flight_offer(flight_data, currency, i, requested_cabin, is_round_trip=False)
+                    offers.append(offer)
+                except Exception as e:
+                    continue
         
         return offers
     
-    def _parse_flight_offer(self, data: dict, currency: str, index: int, requested_cabin: str = "ECONOMY") -> FlightOffer:
+    def _parse_flight_offer(self, data: dict, currency: str, index: int, requested_cabin: str = "ECONOMY", is_round_trip: bool = False) -> FlightOffer:
         """Parse a SerpApi flight result into FlightOffer."""
         
-        segments = []
-        for flight in data.get("flights", []):
-            segment = self._parse_segment(flight, requested_cabin)
-            segments.append(segment)
+        itineraries = []
         
-        # Calculate total duration in ISO 8601 format
-        total_mins = data.get("total_duration", 0)
-        hours, mins = divmod(total_mins, 60)
-        duration_str = f"PT{hours}H{mins}M" if hours else f"PT{mins}M"
-        
-        itinerary = Itinerary(
-            segments=segments,
-            duration=duration_str,
-        )
+        # For round-trip, SerpApi nests flights in a list of legs
+        # Each leg is an outbound or return journey
+        if is_round_trip and isinstance(data.get("flights"), list) and len(data.get("flights", [])) > 0:
+            # Check if we have nested structure (round-trip) or flat structure (one-way)
+            first_item = data["flights"][0]
+            if isinstance(first_item, list):
+                # Round-trip: flights is a list of legs, each leg is a list of segments
+                for leg_flights in data["flights"]:
+                    segments = []
+                    for flight in leg_flights:
+                        segment = self._parse_segment(flight, requested_cabin)
+                        segments.append(segment)
+                    if segments:
+                        # Calculate duration for this leg
+                        leg_duration = self._calculate_leg_duration(leg_flights)
+                        itineraries.append(Itinerary(segments=segments, duration=leg_duration))
+            else:
+                # Flat structure (one-way style even in round-trip response)
+                segments = []
+                for flight in data.get("flights", []):
+                    segment = self._parse_segment(flight, requested_cabin)
+                    segments.append(segment)
+                total_mins = data.get("total_duration", 0)
+                hours, mins = divmod(total_mins, 60)
+                duration_str = f"PT{hours}H{mins}M" if hours else f"PT{mins}M"
+                itineraries.append(Itinerary(segments=segments, duration=duration_str))
+        else:
+            # One-way: original logic
+            segments = []
+            for flight in data.get("flights", []):
+                segment = self._parse_segment(flight, requested_cabin)
+                segments.append(segment)
+            
+            total_mins = data.get("total_duration", 0)
+            hours, mins = divmod(total_mins, 60)
+            duration_str = f"PT{hours}H{mins}M" if hours else f"PT{mins}M"
+            
+            itineraries.append(Itinerary(segments=segments, duration=duration_str))
         
         # Build ID from booking token or index
         booking_token = data.get("booking_token", "")
         offer_id = booking_token[:20] if booking_token else f"serp-{index}"
         
-        # Get validating carrier from first segment
-        validating = segments[0].carrier if segments else None
+        # Get validating carrier from first segment of first itinerary
+        validating = itineraries[0].segments[0].carrier if itineraries and itineraries[0].segments else None
         
         return FlightOffer(
             id=offer_id,
@@ -178,10 +245,80 @@ class SerpApiProvider(FlightProvider):
                 amount=float(data.get("price", 0)),
                 currency=currency,
             ),
-            itineraries=[itinerary],
+            itineraries=itineraries,
             validating_carrier=validating,
             raw=data,  # Keep original for debugging
         )
+    
+    def _parse_round_trip_offer(
+        self, 
+        outbound_data: dict, 
+        return_data: dict, 
+        currency: str, 
+        index: int, 
+        requested_cabin: str = "ECONOMY"
+    ) -> FlightOffer:
+        """Parse outbound + return data into a single round-trip FlightOffer."""
+        
+        # Parse outbound itinerary
+        outbound_segments = []
+        for flight in outbound_data.get("flights", []):
+            segment = self._parse_segment(flight, requested_cabin)
+            outbound_segments.append(segment)
+        
+        outbound_mins = outbound_data.get("total_duration", 0)
+        hours, mins = divmod(outbound_mins, 60)
+        outbound_duration = f"PT{hours}H{mins}M" if hours else f"PT{mins}M"
+        
+        outbound_itin = Itinerary(segments=outbound_segments, duration=outbound_duration)
+        
+        # Parse return itinerary
+        return_segments = []
+        for flight in return_data.get("flights", []):
+            segment = self._parse_segment(flight, requested_cabin)
+            return_segments.append(segment)
+        
+        return_mins = return_data.get("total_duration", 0)
+        hours, mins = divmod(return_mins, 60)
+        return_duration = f"PT{hours}H{mins}M" if hours else f"PT{mins}M"
+        
+        return_itin = Itinerary(segments=return_segments, duration=return_duration)
+        
+        # Use price from return_data as it's the final round-trip price
+        price = return_data.get("price", outbound_data.get("price", 0))
+        
+        # Build ID from booking token
+        booking_token = return_data.get("booking_token", "")
+        offer_id = booking_token[:20] if booking_token else f"serp-rt-{index}"
+        
+        # Get validating carrier from first segment
+        validating = outbound_segments[0].carrier if outbound_segments else None
+        
+        return FlightOffer(
+            id=offer_id,
+            source="serpapi",
+            price=Price(amount=float(price), currency=currency),
+            itineraries=[outbound_itin, return_itin],
+            validating_carrier=validating,
+            raw={"outbound": outbound_data, "return": return_data},
+        )
+    
+    def _calculate_leg_duration(self, leg_flights: list) -> str:
+        """Calculate total duration for a leg from its flights."""
+        total_mins = sum(f.get("duration", 0) for f in leg_flights)
+        # Add layover time if multiple flights
+        if len(leg_flights) > 1:
+            for i in range(len(leg_flights) - 1):
+                arr_time = leg_flights[i].get("arrival_airport", {}).get("time", "")
+                dep_time = leg_flights[i + 1].get("departure_airport", {}).get("time", "")
+                if arr_time and dep_time:
+                    arr_dt = self._parse_datetime(arr_time)
+                    dep_dt = self._parse_datetime(dep_time)
+                    if arr_dt and dep_dt:
+                        layover = (dep_dt - arr_dt).total_seconds() / 60
+                        total_mins += int(layover)
+        hours, mins = divmod(int(total_mins), 60)
+        return f"PT{hours}H{mins}M" if hours else f"PT{mins}M"
     
     def _parse_segment(self, flight: dict, requested_cabin: str = "ECONOMY") -> Segment:
         """Parse a flight segment from SerpApi data."""
