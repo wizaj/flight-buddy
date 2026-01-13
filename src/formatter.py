@@ -145,115 +145,146 @@ def print_search_results(
         }, indent=2))
         return
     
+    # Parse date for nice formatting
+    from datetime import datetime as dt
+    try:
+        dep_dt = dt.strptime(date, "%Y-%m-%d")
+        date_nice = dep_dt.strftime("%a %d %b %Y")
+    except:
+        date_nice = date
+    
     # Header
-    cabin_str = f"  ·  {cabin}" if cabin else ""
     adults_str = f"{adults} adult{'s' if adults > 1 else ''}"
-    trip_type = "Round-trip" if return_date else "One-way"
-    date_str = f"{date} → {return_date}" if return_date else date
-    console.print(f"\n✈  [bold]{origin} ↔ {destination}[/bold]  ·  {date_str}  ·  {trip_type}  ·  {adults_str}{cabin_str}\n")
+    
+    if return_date:
+        try:
+            ret_dt = dt.strptime(return_date, "%Y-%m-%d")
+            return_nice = ret_dt.strftime("%a %d %b")
+        except:
+            return_nice = return_date
+        console.print(f"\n✈  [bold]{origin} ↔ {destination}[/bold]  •  {date_nice} → {return_nice}  •  {adults_str}\n")
+    else:
+        console.print(f"\n✈  [bold]{origin} → {destination}[/bold]  •  {date_nice}  •  {adults_str}\n")
     
     if not offers:
         console.print("[yellow]No flights found[/yellow]")
         return
     
-    for offer in offers:
-        _print_offer(offer, is_round_trip=bool(return_date))
+    if return_date:
+        # Round-trip: show all results together
+        _print_round_trip_offers(offers)
+    else:
+        # One-way: group by direct vs connecting
+        direct = [o for o in offers if o.outbound.is_direct]
+        connecting = [o for o in offers if not o.outbound.is_direct]
+        
+        if direct:
+            console.print(f"[bold]DIRECT FLIGHTS[/bold] {'─' * 36}")
+            for offer in direct:
+                _print_oneway_offer(offer)
+            console.print()
+        
+        if connecting:
+            console.print(f"[bold]CONNECTING[/bold] {'─' * 39}")
+            for offer in connecting:
+                _print_oneway_offer(offer)
     
     console.print(f"\n[dim]{'─' * 50}[/dim]")
-    console.print(f"[dim]Showing {len(offers)} results  ·  Prices include taxes[/dim]\n")
+    console.print(f"[dim]Showing {len(offers)} results  •  Prices include taxes[/dim]\n")
 
 
-def _print_offer(offer: FlightOffer, is_round_trip: bool = False):
-    """Print a single flight offer."""
+def _print_oneway_offer(offer: FlightOffer):
+    """Print a one-way flight offer in clean tabular format."""
+    itin = offer.outbound
     
-    # For round-trip with multiple itineraries
-    if is_round_trip and len(offer.itineraries) >= 2:
-        outbound = offer.itineraries[0]
-        inbound = offer.itineraries[1]
-        
-        # Get carrier name from first segment
-        carrier_name = outbound.segments[0].carrier_name or outbound.segments[0].carrier
-        
-        # Cabin
-        cabin = offer.cabin or "Economy"
-        
-        # Print header with price
-        console.print(f"[bold]{carrier_name}[/bold]  ·  {cabin}  ·  [green bold]{offer.price}[/green bold]")
-        
-        # Print outbound
-        _print_itinerary_line(outbound, "OUT")
-        
-        # Print return
-        _print_itinerary_line(inbound, "RET")
-        
-        console.print()
-    else:
-        # One-way or single itinerary
-        itin = offer.outbound
-        
-        # Build flight codes
-        flights = " → ".join(seg.flight_code for seg in itin.segments)
-        
-        # Get carrier name from first segment
-        carrier_name = itin.segments[0].carrier_name or itin.segments[0].carrier
-        
-        # Get aircraft (first segment, or combine if different)
-        aircraft_list = [seg.aircraft for seg in itin.segments if seg.aircraft]
-        aircraft = get_aircraft_name(aircraft_list[0]) if aircraft_list else None
-        
-        # Times
-        dep_time = format_time(itin.departure_time)
-        arr_time = format_time(itin.arrival_time)
-        day_change = day_diff(itin.departure_time, itin.arrival_time)
-        if day_change:
-            arr_time = f"{arr_time} ({day_change})"
-        
-        # Duration and stops
-        duration = format_duration(itin.duration)
-        if itin.is_direct:
-            stops_str = "Direct"
-        else:
-            stop_codes = [seg.arrival.code for seg in itin.segments[:-1]]
-            stops_str = f"{itin.stops} stop{'s' if itin.stops > 1 else ''} {', '.join(stop_codes)}"
-        
-        # Cabin
-        cabin = offer.cabin or "Economy"
-        
-        # Print
-        console.print(f"[bold]{carrier_name}[/bold] [dim]{flights}[/dim]")
-        console.print(f"  {dep_time} → {arr_time}  ·  {duration}  ·  {stops_str}")
-        equipment_str = f"  ·  [dim]{aircraft}[/dim]" if aircraft else ""
-        console.print(f"  {cabin}  ·  [green bold]{offer.price}[/green bold]{equipment_str}")
-        console.print()
-
-
-def _print_itinerary_line(itin: Itinerary, label: str):
-    """Print a single itinerary line for round-trip display."""
-    # Build flight codes
-    flights = " → ".join(seg.flight_code for seg in itin.segments)
+    # Get carrier and flight number
+    carrier_name = itin.segments[0].carrier_name or itin.segments[0].carrier
+    flight_code = itin.segments[0].flight_code
+    
+    # Shorten carrier name if needed
+    short_carrier = carrier_name.split()[0] if carrier_name else ""
     
     # Times
     dep_time = format_time(itin.departure_time)
     arr_time = format_time(itin.arrival_time)
     day_change = day_diff(itin.departure_time, itin.arrival_time)
     if day_change:
-        arr_time = f"{arr_time}({day_change})"
+        arr_time = f"{arr_time}{day_change}"
     
-    # Duration and stops
-    duration = format_duration(itin.duration)
+    # Price
+    price_str = f"${offer.price.amount:,.0f}"
+    
+    # Right side: aircraft for direct, stops for connecting
     if itin.is_direct:
-        stops_str = "Direct"
+        aircraft = itin.segments[0].aircraft
+        right_info = f"• {get_aircraft_name(aircraft)}" if aircraft else ""
     else:
         stop_codes = [seg.arrival.code for seg in itin.segments[:-1]]
-        stops_str = f"{itin.stops}stop {','.join(stop_codes)}"
+        stops_word = "stop" if itin.stops == 1 else "stops"
+        right_info = f"• {itin.stops} {stops_word} {','.join(stop_codes)}"
     
-    # Route
-    route = f"{itin.origin.code}→{itin.destination.code}"
+    # Format: "Airline FL123    09:40 → 14:40    $433   • Aircraft"
+    console.print(f"  {short_carrier} {flight_code:<8} {dep_time} → {arr_time:<8} {price_str:>8}   {right_info}")
+
+
+def _print_round_trip_offers(offers: list[FlightOffer]):
+    """Print round-trip offers with both legs."""
+    # Group by direct vs connecting (based on outbound)
+    direct = [o for o in offers if o.outbound.is_direct and (len(o.itineraries) < 2 or o.itineraries[1].is_direct)]
+    mixed = [o for o in offers if o not in direct]
     
-    # Date
-    date_str = itin.departure_time.strftime("%d %b")
+    if direct:
+        console.print(f"[bold]DIRECT[/bold] {'─' * 44}")
+        for offer in direct:
+            _print_rt_offer(offer)
+        console.print()
     
-    console.print(f"  [dim]{label}[/dim] {date_str}  {route}  {dep_time}→{arr_time}  {duration}  {stops_str}  [dim]{flights}[/dim]")
+    if mixed:
+        console.print(f"[bold]CONNECTING[/bold] {'─' * 39}")
+        for offer in mixed:
+            _print_rt_offer(offer)
+
+
+def _print_rt_offer(offer: FlightOffer):
+    """Print a single round-trip offer."""
+    out = offer.outbound
+    ret = offer.itineraries[1] if len(offer.itineraries) > 1 else None
+    
+    # Carrier
+    carrier_name = out.segments[0].carrier_name or out.segments[0].carrier
+    short_carrier = carrier_name.split()[0] if carrier_name else ""
+    
+    # Price
+    price_str = f"${offer.price.amount:,.0f}"
+    
+    # Outbound info
+    out_flights = "+".join(seg.flight_code for seg in out.segments)
+    out_times = f"{format_time(out.departure_time)}→{format_time(out.arrival_time)}"
+    out_day = day_diff(out.departure_time, out.arrival_time)
+    if out_day:
+        out_times = f"{format_time(out.departure_time)}→{format_time(out.arrival_time)}{out_day}"
+    
+    if ret:
+        # Return info
+        ret_flights = "+".join(seg.flight_code for seg in ret.segments)
+        ret_times = f"{format_time(ret.departure_time)}→{format_time(ret.arrival_time)}"
+        ret_day = day_diff(ret.departure_time, ret.arrival_time)
+        if ret_day:
+            ret_times = f"{format_time(ret.departure_time)}→{format_time(ret.arrival_time)}{ret_day}"
+        
+        # Stops info
+        out_stops = "" if out.is_direct else f" ({out.stops}x)"
+        ret_stops = "" if ret.is_direct else f" ({ret.stops}x)"
+        
+        console.print(f"  [bold]{short_carrier}[/bold]  {out_times}{out_stops}  ⇄  {ret_times}{ret_stops}  [green bold]{price_str}[/green bold]")
+        console.print(f"    [dim]OUT {out_flights}  •  RET {ret_flights}[/dim]")
+    else:
+        console.print(f"  [bold]{short_carrier}[/bold]  {out_times}  [green bold]{price_str}[/green bold]  [dim]{out_flights}[/dim]")
+
+
+def _print_offer_legacy(offer: FlightOffer, is_round_trip: bool = False):
+    """Legacy print function (kept for reference)."""
+    pass
 
 
 def _offer_to_dict(offer: FlightOffer) -> dict:
