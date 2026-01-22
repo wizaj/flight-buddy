@@ -6,6 +6,24 @@ from .base import FlightProvider, ProviderError
 from ..config import load_config
 
 
+def get_award_provider():
+    """Get the Seats.aero award provider instance.
+    
+    Returns:
+        Configured SeatsAeroProvider instance
+    
+    Raises:
+        ProviderError: If API key is not configured
+    """
+    from .seatsaero import SeatsAeroProvider
+    config = load_config()
+    seatsaero_config = config.get("seatsaero", {})
+    return SeatsAeroProvider(
+        api_key=seatsaero_config.get("api_key"),
+        base_url=seatsaero_config.get("base_url"),
+    )
+
+
 def get_provider(provider_name: Optional[str] = None) -> FlightProvider:
     """Get a flight provider instance.
     

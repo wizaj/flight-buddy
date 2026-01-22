@@ -1,0 +1,37 @@
+balances:
+  emirates:
+    program: Emirates Skywards
+    miles: 72290
+    tier: Gold
+    updated: '2026-01-22'
+    history:
+    - date: '2026-01-22'
+      miles: 72290
+      note: Initial balance
+  flyingblue:
+    program: Flying Blue
+    miles: 12416
+    tier: Gold
+    updated: '2026-01-22'
+    history:
+    - date: '2026-01-22'
+      miles: 12416
+      note: Initial balance (KLM)
+  ethiopian:
+    program: ShebaMiles
+    miles: 64920
+    tier: Silver
+    updated: '2026-01-22'
+    history:
+    - date: '2026-01-22'
+      miles: 64920
+      note: Initial balance
+  avios:
+    program: British Airways Avios
+    miles: 50261
+    tier: 5156 TP
+    updated: '2026-01-22'
+    history:
+    - date: '2026-01-22'
+      miles: 50261
+      note: Initial balance (Executive Club)

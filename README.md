@@ -64,6 +64,93 @@ fb search JNB DXB 2026-02-01 --exclude SA
 fb search JNB DXB 2026-02-01 --json
 ```
 
+### Search Award Flights (Miles/Points)
+
+Search for award redemption availability across 20+ mileage programs using Seats.aero.
+
+```bash
+# Basic award search
+fb awards JNB DXB 2026-02-14
+
+# Business class awards only
+fb awards JNB DXB 2026-02-14 --cabin J
+
+# Direct awards only
+fb awards JNB DXB 2026-02-14 --direct
+
+# Search specific mileage programs
+fb awards JNB DXB 2026-02-14 --program aeroplan,united,emirates
+
+# Date range search
+fb awards JNB DXB 2026-02-14 --end-date 2026-02-21
+
+# Sort by cheapest miles
+fb awards JNB DXB 2026-02-14 --cheapest
+
+# Filter by operating airline
+fb awards JNB DXB 2026-02-14 --airline EK
+
+# JSON output
+fb awards JNB DXB 2026-02-14 --json
+```
+
+**Award Search Output:**
+```
+✈  JNB → DXB  •  Award Search  •  2026-02-14
+
+  2026-02-14
+  ────────────────────────────────────────────────────────────
+    Emirates Skywards        B: 91,500 ✓   |  E: 20,000 ✓💰
+    Qantas                   B: 82,100 ✓💰 |  E: 29,000 ✓💰
+    United MileagePlus       B: 90,000     |  E: 35,000
+```
+
+**Legend:** B=Business, E=Economy, ✓=Direct, 💰=Affordable (based on your balance)
+
+### Manage Mileage Balances
+
+Track your frequent flyer balances to see affordability in award searches.
+
+```bash
+# View all balances
+fb balance
+
+# Update a balance
+fb balance update emirates 72290 --tier Gold
+
+# Update with note (for tracking)
+fb balance update emirates 85000 --note "Miles posted from DXB trip"
+
+# View balance history
+fb balance history emirates
+```
+
+**Balance Output:**
+```
+✈  Mileage Balances
+──────────────────────────────────────────────────
+  Emirates Skywards         72,290 [Gold]
+  ShebaMiles                64,920 [Silver]
+  British Airways Avios     50,261 [5156 TP]
+  Flying Blue               12,416 [Gold]
+
+  Total                    199,887
+  Est. value              $  1,999
+```
+
+**Affordability Indicators in Award Search:**
+- 💰 = You can afford this redemption
+- ⚠️ = Close (within 10k miles)
+- *(no icon)* = Need more miles or program not tracked
+
+**History Tracking:**
+```
+fb balance update emirates 85000 --note "DXB trip posted"
+
+✓ Updated Emirates Skywards
+  Balance: 85,000 (+12,710)
+```
+
 ### Output Format
 
 **One-way:**
@@ -126,17 +213,20 @@ FLIGHT_BUDDY_PROVIDER=amadeus fb search JNB DXB 2026-02-01
 
 ### Feature Comparison
 
-| Feature | SerpApi | Amadeus | Duffel |
-|---------|:-------:|:-------:|:------:|
-| **Flight Search** | ✅ | ✅ | 🚧 |
-| **Round-trip Search** | ✅ | ❌ | 🚧 |
-| **Real-time Prices** | ✅ | ⚠️ | 🚧 |
-| **Price Insights** | ✅ | ❌ | ❌ |
-| **Flight Schedule Lookup** | ❌ | ✅ | ❌ |
-| **Seat Availability by Class** | ❌ | ✅ | 🚧 |
-| **Seat Maps** | ❌ | ✅ | ⚠️ |
-| **Booking** | ❌ | ✅ | ✅ |
-| **African Airline Coverage** | ✅ | ⚠️ | ✅ |
+| Feature | SerpApi | Amadeus | Seats.aero | Duffel |
+|---------|:-------:|:-------:|:----------:|:------:|
+| **Flight Search (Cash)** | ✅ | ✅ | ❌ | 🚧 |
+| **Award Search (Miles)** | ❌ | ❌ | ✅ | ❌ |
+| **Balance Tracking** | ❌ | ❌ | ✅ | ❌ |
+| **Affordability Check** | ❌ | ❌ | ✅ | ❌ |
+| **Round-trip Search** | ✅ | ❌ | ✅ | 🚧 |
+| **Real-time Prices** | ✅ | ⚠️ | ✅ | 🚧 |
+| **Multi-Program Compare** | ❌ | ❌ | ✅ | ❌ |
+| **Flight Schedule Lookup** | ❌ | ✅ | ❌ | ❌ |
+| **Seat Availability by Class** | ❌ | ✅ | ✅ | 🚧 |
+| **Seat Maps** | ❌ | ✅ | ❌ | ⚠️ |
+| **Booking** | ❌ | ✅ | ❌ | ✅ |
+| **African Airline Coverage** | ✅ | ⚠️ | ✅ | ✅ |
 
 ✅ = Available  ⚠️ = Limited/Sandbox  ❌ = Not available  🚧 = Not yet implemented
 
@@ -199,6 +289,56 @@ fb avail EK766 2026-02-01 --cabin J
 # Seat map
 fb seats EK766 2026-02-01
 ```
+
+### Seats.aero
+
+Award/redemption flight availability across 20+ mileage programs.
+
+**Pros:**
+- Search award availability across Aeroplan, United, American, Emirates, Qantas, etc.
+- Compare mileage costs across programs instantly
+- Real-time availability data
+- Filter by cabin class, direct flights, specific programs
+- No booking needed (use airline site to book)
+
+**Cons:**
+- Award flights only (no cash prices)
+- Requires Pro subscription ($10/mo)
+- 1,000 API calls/day limit
+- Non-commercial use only (without agreement)
+
+**Setup:**
+1. Get Pro subscription at https://seats.aero
+2. Generate API key at https://seats.aero/settings (API tab)
+3. Add to `.env`: `SEATSAERO_API_KEY=pro_xxx`
+
+**Commands:**
+```bash
+# Basic award search
+fb awards JNB DXB 2026-02-14
+
+# Business class, direct only
+fb awards JNB DXB 2026-02-14 --cabin J --direct
+
+# Search specific programs
+fb awards JNB DXB 2026-02-14 --program emirates,qantas
+
+# Date range, sorted by cheapest
+fb awards JNB DXB 2026-02-14 -e 2026-02-21 --cheapest
+
+# Manage your mileage balances
+fb balance
+fb balance update emirates 72290 --tier Gold
+fb balance history emirates
+```
+
+**Supported Programs:**
+Aeroplan, United MileagePlus, AAdvantage, Alaska Mileage Plan, Delta SkyMiles,
+Virgin Atlantic, Qantas, Emirates Skywards, Etihad Guest, KrisFlyer, LifeMiles, Smiles, and more.
+
+**Balance Tracking:**
+Store your mileage balances to see 💰 affordability indicators in award search results.
+Deltas are tracked automatically when you update balances.
 
 ### Duffel
 
