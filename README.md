@@ -5,14 +5,15 @@ Fast flight searches from the command line. Built for frequent flyers who want a
 ## Installation
 
 ```bash
-pip install flight-buddy
-```
-
-Or from source:
-```bash
 git clone https://github.com/wizaj/flight-buddy.git
 cd flight-buddy
 pip install -e .
+```
+
+Then add an alias to your shell (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+alias fb='python -m src.cli'
 ```
 
 ## Quick Start
