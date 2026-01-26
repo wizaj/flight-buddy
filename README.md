@@ -10,11 +10,7 @@ cd flight-buddy
 pip install -e .
 ```
 
-Then add an alias to your shell (`~/.zshrc` or `~/.bashrc`):
-
-```bash
-alias fb='python -m src.cli'
-```
+This installs the `fb` command globally. Run `fb --help` to verify.
 
 ## Quick Start
 
