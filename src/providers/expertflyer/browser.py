@@ -21,10 +21,10 @@ _env_path = Path(__file__).parent.parent.parent.parent / ".env"
 if _env_path.exists():
     load_dotenv(_env_path)
 
-# Cookie cache location
+# Cache locations
 CACHE_DIR = Path.home() / ".cache" / "flight-buddy"
-COOKIE_FILE = CACHE_DIR / "ef-cookies.json"
 SESSION_FILE = CACHE_DIR / "ef-session.json"
+BROWSER_PROFILE = CACHE_DIR / "ef-browser-profile"
 
 # ExpertFlyer URLs
 EF_BASE = "https://www.expertflyer.com"
@@ -35,13 +35,17 @@ EF_SEAT_AVAIL = f"{EF_BASE}/seatAvailability"
 def ensure_cache_dir():
     """Ensure cache directory exists."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    BROWSER_PROFILE.mkdir(parents=True, exist_ok=True)
 
 
 def run_browser(cmd: str, timeout: int = 60) -> str:
-    """Run agent-browser command and return output."""
+    """Run agent-browser command with persistent profile."""
+    ensure_cache_dir()
     try:
+        # Use persistent profile to maintain login session
+        full_cmd = f"agent-browser --profile {BROWSER_PROFILE} {cmd}"
         result = subprocess.run(
-            f"agent-browser {cmd}",
+            full_cmd,
             shell=True,
             capture_output=True,
             text=True,
@@ -284,17 +288,34 @@ def submit_search() -> bool:
     return True
 
 
+def ensure_browser_ready() -> bool:
+    """Ensure browser is ready with our profile."""
+    ensure_cache_dir()
+    
+    # Close any existing browser to ensure we use our profile
+    run_browser("close")
+    time.sleep(1)
+    
+    # Open ExpertFlyer with our persistent profile
+    output = run_browser(f'--headed open "{EF_BASE}"')
+    if "ERROR" in output:
+        print(f"Failed to start browser: {output}", file=sys.stderr)
+        return False
+    
+    time.sleep(2)
+    return True
+
+
 def ensure_logged_in() -> bool:
     """Ensure we're logged in, logging in if necessary."""
-    # First check if browser is open at all
-    output = run_browser("status")
+    # Start browser with persistent profile
+    if not ensure_browser_ready():
+        return False
     
-    if "not running" in output.lower() or "no browser" in output.lower():
-        # Need to start browser
-        run_browser(f'open "{EF_BASE}"')
-        time.sleep(2)
-    
+    # Check if already logged in (session persisted in profile)
     if is_logged_in():
+        print("✅ Already logged in (session restored)", file=sys.stderr)
+        save_session()
         return True
     
     return login()
