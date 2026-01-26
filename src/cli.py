@@ -686,6 +686,128 @@ def balance_history(program: str, limit: int, as_json: bool):
 
 
 # ─────────────────────────────────────────────────────────────
+# ef-avail command (ExpertFlyer Seat Availability)
+# ─────────────────────────────────────────────────────────────
+
+@cli.command("ef-avail")
+@click.argument("origin")
+@click.argument("destination")
+@click.argument("date")
+@click.option("-a", "--airline", help="Airline filter (2-letter IATA code)")
+@click.option("-c", "--cabin", help="Cabin filter (J=business, W=premium, Y=economy)")
+@click.option("-f", "--fares", default="J,C,D,I,Z,Y,B,M", 
+              help="Fare classes to display (comma-separated)")
+@click.option("--compact", is_flag=True, help="Compact single-line output")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def ef_avail(
+    origin: str,
+    destination: str,
+    date: str,
+    airline: Optional[str],
+    cabin: Optional[str],
+    fares: str,
+    compact: bool,
+    as_json: bool,
+):
+    """Check seat availability via ExpertFlyer.
+    
+    Scrapes ExpertFlyer to show fare class availability with seat counts.
+    Requires EXPERTFLYER_EMAIL and EXPERTFLYER_PASSWORD in .env or environment.
+    
+    Examples:
+    
+        fb ef-avail JNB CDG 2026-02-01
+        
+        fb ef-avail JNB CDG 2026-02-01 --airline AF
+        
+        fb ef-avail JNB CDG tomorrow --cabin J
+        
+        fb ef-avail JNB AMS 2026-02-01 --fares J,C,D,I,Z
+    """
+    from .providers.expertflyer.scraper import (
+        search_and_display,
+        extract_results_from_page,
+        FARE_CLASSES,
+    )
+    from .providers.expertflyer.browser import ensure_logged_in, search_availability
+    
+    try:
+        parsed_date = parse_date(date)
+        fare_classes = [f.strip().upper() for f in fares.split(",")]
+        cabin_filter = cabin.upper() if cabin else None
+        
+        if as_json:
+            # JSON output mode
+            import json as json_lib
+            
+            snapshot = search_availability(
+                origin.upper(),
+                destination.upper(),
+                parsed_date,
+                airline.upper() if airline else None,
+            )
+            
+            flights = extract_results_from_page()
+            
+            output = {
+                "origin": origin.upper(),
+                "destination": destination.upper(),
+                "date": parsed_date,
+                "airline": airline.upper() if airline else None,
+                "flights": [
+                    {
+                        "flight": f.flight,
+                        "origin": f.origin,
+                        "destination": f.destination,
+                        "depart": f.depart,
+                        "arrive": f.arrive,
+                        "aircraft": f.aircraft,
+                        "availability": {
+                            cls: {
+                                "seats": seats,
+                                "cabin": FARE_CLASSES.get(cls, ("?", "?"))[0],
+                                "description": FARE_CLASSES.get(cls, ("?", "?"))[1],
+                            }
+                            for cls, seats in f.availability.items()
+                        }
+                    }
+                    for f in flights
+                ]
+            }
+            click.echo(json_lib.dumps(output, indent=2))
+            return
+        
+        # Interactive output
+        click.echo()
+        click.secho(f"✈  ExpertFlyer: {origin.upper()} → {destination.upper()}", 
+                   fg="cyan", bold=True, nl=False)
+        click.echo(f"  •  {parsed_date}", nl=False)
+        if airline:
+            click.echo(f"  •  {airline.upper()}")
+        else:
+            click.echo()
+        click.echo()
+        
+        search_and_display(
+            origin.upper(),
+            destination.upper(),
+            parsed_date,
+            airline=airline.upper() if airline else None,
+            cabin=cabin_filter,
+            detailed=not compact,
+            fare_classes=fare_classes,
+        )
+        
+    except ValueError as e:
+        click.secho(f"  ⚠️  {e}", fg="yellow")
+        click.echo("  Set EXPERTFLYER_EMAIL and EXPERTFLYER_PASSWORD in ~/.zshrc or .env")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"ExpertFlyer error: {e}")
+        sys.exit(1)
+
+
+# ─────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────
 
