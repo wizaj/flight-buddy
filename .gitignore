@@ -20,3 +20,4 @@ node_modules/
 
 # Postman exports with secrets
 *.postman_environment.json
+*.egg-info/
