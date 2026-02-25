@@ -25,7 +25,7 @@ class ATFClient:
             )
         self._session_id: Optional[str] = None
         self._request_id = 0
-        self._http = httpx.Client(timeout=30.0)
+        self._http = httpx.Client(timeout=300.0)
 
     def _next_id(self) -> int:
         self._request_id += 1
@@ -105,7 +105,11 @@ class ATFClient:
         for block in content:
             if block.get("type") == "text":
                 try:
-                    return json.loads(block["text"])
+                    parsed = json.loads(block["text"])
+                    # Unwrap {"success": true, "data": {...}} envelope
+                    if isinstance(parsed, dict) and "data" in parsed and "success" in parsed:
+                        return parsed["data"]
+                    return parsed
                 except (json.JSONDecodeError, KeyError):
                     return block.get("text", "")
         return content
