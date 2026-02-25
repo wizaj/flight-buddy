@@ -126,6 +126,50 @@ Economy:
 
 ---
 
+### `fb atf` — Award Travel Finder
+
+Search award availability via AwardTravelFinder for British Airways, Qatar Airways, and Cathay Pacific. Uses the MCP API.
+
+```bash
+# Monthly calendar — find open dates across a whole month
+fb atf month DOH JFK 2026-03 --airline qatar
+fb atf month LHR JFK 2026-06 --airline ba --cabin business
+
+# Single day — detailed flight-by-flight view
+fb atf day DOH JFK 2026-03-15 --airline qatar
+fb atf day LHR JFK tomorrow --airline ba
+
+# Pricing chart (points per cabin, off-peak/peak)
+fb atf pricing LHR JFK --airline ba
+
+# Airports served by an airline
+fb atf airports --airline qatar
+
+# List supported airlines & loyalty programs
+fb atf airlines
+fb atf programs
+
+# Full award chart for a program
+fb atf rates --program emirates
+fb atf rates --program british-airways
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `month` | Monthly availability calendar (primary use case) |
+| `day` | Single-date availability with flight details |
+| `pricing` | Points pricing chart for a route |
+| `airports` | Airports served by an airline |
+| `airlines` | List supported airlines |
+| `programs` | List loyalty programs |
+| `rates` | Full award chart for a program |
+
+**Airline shortcuts:** `ba`/`british` → British Airways, `qatar`/`qr` → Qatar Airways, `cathay`/`cx` → Cathay Pacific
+
+**Program slugs for `rates`:** `british-airways`, `qatar-airways`, `emirates`, `etihad`, `aeroplan`, `flying-blue`, `singapore-airlines`, `cathay-pacific`, `turkish-airlines`, `ana`, `jetblue`, `jet2-emirates`
+
+---
+
 ### `fb balance` — Mileage Balances
 
 Track your frequent flyer balances to see affordability in award searches.
@@ -213,6 +257,9 @@ SEATSAERO_API_KEY=pro_xxx
 EXPERTFLYER_EMAIL=you@email.com
 EXPERTFLYER_PASSWORD=yourpassword
 
+# Award Travel Finder (MCP API)
+ATF_API_KEY=xxx
+
 # Optional: Amadeus GDS
 AMADEUS_API_KEY=xxx
 AMADEUS_API_SECRET=xxx
@@ -225,6 +272,7 @@ AMADEUS_API_SECRET=xxx
 | **SerpApi** | [serpapi.com](https://serpapi.com) | 100 free/mo, then $50/5k |
 | **Seats.aero** | [seats.aero/settings](https://seats.aero/settings) | $10/mo Pro |
 | **ExpertFlyer** | [expertflyer.com](https://expertflyer.com) | $9.99/mo Premium |
+| **AwardTravelFinder** | [awardtravelfinder.com](https://awardtravelfinder.com) | Subscription |
 | **Amadeus** | [developers.amadeus.com](https://developers.amadeus.com) | Free sandbox |
 
 ---
