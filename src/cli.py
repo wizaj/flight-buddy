@@ -808,6 +808,245 @@ def ef_avail(
 
 
 # ─────────────────────────────────────────────────────────────
+# atf command group (Award Travel Finder)
+# ─────────────────────────────────────────────────────────────
+
+@cli.group()
+def atf():
+    """Award flight availability via AwardTravelFinder.
+
+    Search award availability across British Airways, Qatar Airways,
+    and Cathay Pacific. Uses the AwardTravelFinder MCP API.
+
+    Examples:
+
+        fb atf month DOH JFK 2026-03 --airline qatar
+
+        fb atf day LHR JFK 2026-03-15 --airline ba
+
+        fb atf pricing LHR JFK --airline british_airways
+
+        fb atf airlines
+    """
+    pass
+
+
+@atf.command("month")
+@click.argument("origin")
+@click.argument("destination")
+@click.argument("month")
+@click.option("-a", "--airline", required=True, help="Airline (ba/qatar/cathay or full name)")
+@click.option("-c", "--cabin", help="Filter cabin (economy/business/first)")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def atf_month(origin, destination, month, airline, cabin, as_json):
+    """Monthly award availability calendar.
+
+    Shows day-by-day availability for a whole month. Best for finding
+    open dates.
+
+    Examples:
+
+        fb atf month DOH JFK 2026-03 --airline qatar
+
+        fb atf month LHR JFK 2026-06 --airline ba --cabin business
+    """
+    from .providers.atf.adapter import ATFAdapter
+    from .formatter import print_atf_monthly
+
+    try:
+        with ATFAdapter() as atf_api:
+            data = atf_api.search_monthly(airline, origin, destination, month)
+
+        if as_json:
+            import json
+            click.echo(json.dumps(data, indent=2))
+            return
+
+        print_atf_monthly(data, origin.upper(), destination.upper(), airline, cabin)
+
+    except (ProviderError, ValueError) as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+@atf.command("day")
+@click.argument("origin")
+@click.argument("destination")
+@click.argument("date")
+@click.option("-a", "--airline", required=True, help="Airline (ba/qatar/cathay)")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def atf_day(origin, destination, date, airline, as_json):
+    """Daily award availability with flight details.
+
+    Examples:
+
+        fb atf day DOH JFK 2026-03-15 --airline qatar
+
+        fb atf day LHR JFK tomorrow --airline ba
+    """
+    from .providers.atf.adapter import ATFAdapter
+    from .formatter import print_atf_daily
+
+    try:
+        parsed_date = parse_date(date)
+        with ATFAdapter() as atf_api:
+            data = atf_api.search_daily(airline, origin, destination, parsed_date)
+
+        if as_json:
+            import json
+            click.echo(json.dumps(data, indent=2))
+            return
+
+        print_atf_daily(data, origin.upper(), destination.upper(), airline)
+
+    except (ProviderError, ValueError) as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+@atf.command("pricing")
+@click.argument("origin")
+@click.argument("destination")
+@click.option("-a", "--airline", required=True, help="Airline (ba/qatar/cathay)")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def atf_pricing(origin, destination, airline, as_json):
+    """Award pricing chart for a route.
+
+    Examples:
+
+        fb atf pricing LHR JFK --airline ba
+
+        fb atf pricing DOH JFK --airline qatar
+    """
+    from .providers.atf.adapter import ATFAdapter
+    from .formatter import print_atf_pricing
+
+    try:
+        with ATFAdapter() as atf_api:
+            data = atf_api.get_pricing(airline, origin, destination)
+
+        if as_json:
+            import json
+            click.echo(json.dumps(data, indent=2))
+            return
+
+        print_atf_pricing(data, origin.upper(), destination.upper(), airline)
+
+    except (ProviderError, ValueError) as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+@atf.command("airports")
+@click.option("-a", "--airline", required=True, help="Airline (ba/qatar/cathay)")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def atf_airports(airline, as_json):
+    """List airports served by an airline.
+
+    Examples:
+
+        fb atf airports --airline qatar
+
+        fb atf airports --airline ba
+    """
+    from .providers.atf.adapter import ATFAdapter
+    from .formatter import print_atf_airports
+
+    try:
+        with ATFAdapter() as atf_api:
+            data = atf_api.get_airports(airline)
+
+        if as_json:
+            import json
+            click.echo(json.dumps(data, indent=2))
+            return
+
+        print_atf_airports(data, airline)
+
+    except (ProviderError, ValueError) as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+@atf.command("airlines")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def atf_airlines(as_json):
+    """List supported airlines."""
+    from .providers.atf.adapter import ATFAdapter
+    from .formatter import print_atf_airlines
+
+    try:
+        with ATFAdapter() as atf_api:
+            data = atf_api.list_airlines()
+
+        if as_json:
+            import json
+            click.echo(json.dumps(data, indent=2))
+            return
+
+        print_atf_airlines(data)
+
+    except (ProviderError, ValueError) as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+@atf.command("programs")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def atf_programs(as_json):
+    """List loyalty programs with award chart data."""
+    from .providers.atf.adapter import ATFAdapter
+    from .formatter import print_atf_programs
+
+    try:
+        with ATFAdapter() as atf_api:
+            data = atf_api.list_programs()
+
+        if as_json:
+            import json
+            click.echo(json.dumps(data, indent=2))
+            return
+
+        print_atf_programs(data)
+
+    except (ProviderError, ValueError) as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+@atf.command("rates")
+@click.option("-p", "--program", required=True,
+              help="Program slug (e.g. emirates, british-airways, aeroplan)")
+@click.option("-j", "--json", "as_json", is_flag=True, help="JSON output")
+def atf_rates(program, as_json):
+    """Full award chart rates for a loyalty program.
+
+    Examples:
+
+        fb atf rates --program emirates
+
+        fb atf rates --program british-airways
+    """
+    from .providers.atf.adapter import ATFAdapter
+    from .formatter import print_atf_rates
+
+    try:
+        with ATFAdapter() as atf_api:
+            data = atf_api.get_program_rates(program)
+
+        if as_json:
+            import json
+            click.echo(json.dumps(data, indent=2))
+            return
+
+        print_atf_rates(data, program)
+
+    except (ProviderError, ValueError) as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+# ─────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────
 

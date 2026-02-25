@@ -2,14 +2,13 @@
 """
 ExpertFlyer browser automation using agent-browser.
 
-Handles login, session management, and navigation.
+Async version with proper timeout handling.
 """
 
+import asyncio
 import json
 import os
-import subprocess
 import sys
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -31,6 +30,11 @@ EF_BASE = "https://www.expertflyer.com"
 EF_LOGIN = f"{EF_BASE}/login"
 EF_SEAT_AVAIL = f"{EF_BASE}/seatAvailability"
 
+# Timeouts (seconds)
+CMD_TIMEOUT = 30  # Per-command timeout
+LOGIN_TIMEOUT = 60  # Total login flow timeout
+SEARCH_TIMEOUT = 90  # Total search flow timeout
+
 
 def ensure_cache_dir():
     """Ensure cache directory exists."""
@@ -38,40 +42,43 @@ def ensure_cache_dir():
     BROWSER_PROFILE.mkdir(parents=True, exist_ok=True)
 
 
-def run_browser(cmd: str, timeout: int = 60) -> str:
-    """Run agent-browser command with persistent profile."""
+async def run_browser(cmd: str, timeout: int = CMD_TIMEOUT, headed: bool = False) -> str:
+    """Run agent-browser command asynchronously."""
     ensure_cache_dir()
     try:
-        # Use persistent profile to maintain login session
-        full_cmd = f"agent-browser --profile {BROWSER_PROFILE} {cmd}"
-        result = subprocess.run(
+        headed_flag = "--headed " if headed else ""
+        full_cmd = f"agent-browser {headed_flag}--profile {BROWSER_PROFILE} {cmd}"
+        proc = await asyncio.create_subprocess_shell(
             full_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(),
             timeout=timeout
         )
-        output = result.stdout + result.stderr
-        return output
-    except subprocess.TimeoutExpired:
+        return (stdout.decode() + stderr.decode()).strip()
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except:
+            pass
         return "ERROR: Command timed out"
     except Exception as e:
         return f"ERROR: {e}"
 
 
-def is_logged_in() -> bool:
+async def is_logged_in() -> bool:
     """Check if we're currently logged into ExpertFlyer."""
-    # Take a snapshot and look for login indicators
-    output = run_browser("snapshot -c")
+    output = await run_browser("snapshot -c")
     
-    # If we see "Log Out" or the user menu, we're logged in
-    if "Log Out" in output or "My Account" in output:
+    # If we see user menu or welcome message, we're logged in
+    if "Wiza" in output or "My Account" in output or "Welcome" in output:
         return True
-    # If we see "Log In" or login form, we're not
-    if "Log In" in output or "Sign In" in output or "Password" in output:
+    # If we see login indicators, we're not
+    if "Sign In" in output or "Log In" in output or "Password" in output:
         return False
     
-    # Default to not logged in
     return False
 
 
@@ -90,7 +97,7 @@ def get_credentials() -> tuple[str, str]:
 
 
 def save_session():
-    """Save current session state (cookies via browser profile)."""
+    """Save current session state."""
     ensure_cache_dir()
     session_data = {
         "logged_in_at": datetime.now().isoformat(),
@@ -115,210 +122,115 @@ def load_session() -> Optional[dict]:
     return None
 
 
-def login(force: bool = False) -> bool:
-    """
-    Log into ExpertFlyer via Auth0.
+async def login(force: bool = False) -> bool:
+    """Log into ExpertFlyer via Auth0."""
     
-    Args:
-        force: Force re-login even if session exists
+    async def _do_login():
+        # Check if we have a valid session
+        if not force and load_session():
+            await run_browser(f'open "{EF_BASE}"')
+            await asyncio.sleep(2)
+            if await is_logged_in():
+                return True
         
-    Returns:
-        True if login successful
-    """
-    # Check if we have a valid session
-    if not force and load_session():
-        # Quick check if still logged in
-        run_browser(f"open {EF_BASE}")
-        time.sleep(2)
-        if is_logged_in():
+        email, password = get_credentials()
+        
+        print("🔐 Logging into ExpertFlyer...", file=sys.stderr)
+        
+        # Navigate to homepage
+        output = await run_browser(f'open "{EF_BASE}"')
+        if "ERROR" in output:
+            print(f"Failed to open homepage: {output}", file=sys.stderr)
+            return False
+        
+        await asyncio.sleep(2)
+        
+        # Click Sign In
+        await run_browser('click "Sign In"')
+        await asyncio.sleep(3)
+        
+        # Get snapshot to find form refs
+        snapshot = await run_browser("snapshot -i -c")
+        
+        # Find email/password refs dynamically
+        email_ref = "@e3"  # Default
+        pass_ref = "@e4"   # Default
+        login_ref = "@e6"  # Default
+        
+        if 'textbox "Email"' in snapshot:
+            # Parse refs from snapshot
+            for line in snapshot.split('\n'):
+                if 'textbox "Email"' in line and '[ref=' in line:
+                    email_ref = '@' + line.split('[ref=')[1].split(']')[0]
+                elif 'textbox "Password"' in line and '[ref=' in line:
+                    pass_ref = '@' + line.split('[ref=')[1].split(']')[0]
+                elif 'button "Log In"' in line and '[ref=' in line:
+                    login_ref = '@' + line.split('[ref=')[1].split(']')[0]
+        
+        # Fill credentials
+        await run_browser(f'fill {email_ref} "{email}"')
+        await asyncio.sleep(0.5)
+        await run_browser(f'fill {pass_ref} "{password}"')
+        await asyncio.sleep(0.5)
+        
+        # Click login
+        await run_browser(f'click {login_ref}')
+        await asyncio.sleep(4)
+        
+        # Check success
+        if await is_logged_in():
+            print("✅ Logged in successfully", file=sys.stderr)
+            save_session()
             return True
-    
-    email, password = get_credentials()
-    
-    print("🔐 Logging into ExpertFlyer...", file=sys.stderr)
-    
-    # Navigate to homepage and click Sign In (Auth0 redirect)
-    output = run_browser(f'open "{EF_BASE}"')
-    if "ERROR" in output:
-        print(f"Failed to open homepage: {output}", file=sys.stderr)
+        
+        # Fallback: try clicking by text
+        await run_browser('click "Log In"')
+        await asyncio.sleep(3)
+        
+        if await is_logged_in():
+            print("✅ Logged in successfully", file=sys.stderr)
+            save_session()
+            return True
+        
+        print("❌ Login failed", file=sys.stderr)
         return False
     
-    time.sleep(2)
-    
-    # Click Sign In link to trigger Auth0 redirect
-    run_browser('click "Sign In"')
-    time.sleep(3)
-    
-    # Now on Auth0 login page (auth.expertflyer.com)
-    # Get snapshot to find form refs
-    snapshot = run_browser("snapshot -i -c")
-    
-    # Auth0 form has Email and Password textboxes
-    # Fill email
-    run_browser(f'fill @e2 "{email}"')
-    time.sleep(0.3)
-    
-    # Fill password
-    run_browser(f'fill @e3 "{password}"')
-    time.sleep(0.3)
-    
-    # Click Log In button
-    run_browser('click @e5')
-    
-    # Wait for Auth0 callback and redirect
-    time.sleep(4)
-    
-    # Check if login succeeded
-    if is_logged_in():
-        print("✅ Logged in successfully", file=sys.stderr)
-        save_session()
-        return True
-    
-    # Fallback: try clicking by text
-    run_browser('click "Log In"')
-    time.sleep(3)
-    
-    if is_logged_in():
-        print("✅ Logged in successfully", file=sys.stderr)
-        save_session()
-        return True
-    
-    print("❌ Login failed", file=sys.stderr)
-    return False
+    try:
+        return await asyncio.wait_for(_do_login(), timeout=LOGIN_TIMEOUT)
+    except asyncio.TimeoutError:
+        print("❌ Login timed out", file=sys.stderr)
+        return False
 
 
-def navigate_to_seat_availability() -> bool:
-    """Navigate to the Seat Availability search page."""
-    output = run_browser(f'navigate "{EF_SEAT_AVAIL}"')
-    time.sleep(2)
-    
-    # Verify we're on the right page
-    snapshot = run_browser("snapshot -c")
-    
-    if "Seat Availability" in snapshot or "Origin" in snapshot:
-        return True
-    
-    # May need to click through menu
-    run_browser('click "Seat Availability"')
-    time.sleep(2)
-    
-    return True
-
-
-def fill_search_form(
-    origin: str,
-    destination: str,
-    date: str,
-    airline: Optional[str] = None,
-) -> bool:
-    """
-    Fill the Seat Availability search form.
-    
-    Args:
-        origin: 3-letter airport code
-        destination: 3-letter airport code  
-        date: YYYY-MM-DD format
-        airline: Optional 2-letter airline code
-        
-    Returns:
-        True if form filled successfully
-    """
-    # Get snapshot to understand form structure
-    snapshot = run_browser("snapshot -i -c")
-    
-    # Clear and fill origin
-    # ExpertFlyer uses autocomplete inputs
-    run_browser('click @origin')
-    time.sleep(0.3)
-    run_browser('type @origin ""')  # Clear
-    run_browser(f'type @origin "{origin}"')
-    time.sleep(0.5)
-    # Click first autocomplete suggestion
-    run_browser('press Enter')
-    time.sleep(0.3)
-    
-    # Clear and fill destination
-    run_browser('click @destination')
-    time.sleep(0.3)
-    run_browser(f'type @destination "{destination}"')
-    time.sleep(0.5)
-    run_browser('press Enter')
-    time.sleep(0.3)
-    
-    # Fill date - format depends on locale settings
-    # ExpertFlyer typically uses MM/DD/YYYY
-    from datetime import datetime as dt
-    parsed_date = dt.strptime(date, "%Y-%m-%d")
-    formatted_date = parsed_date.strftime("%m/%d/%Y")
-    
-    run_browser('click @date')
-    time.sleep(0.3)
-    # Select all and replace
-    run_browser('press Control+a')
-    run_browser(f'type @date "{formatted_date}"')
-    time.sleep(0.3)
-    
-    # If airline specified, fill that too
-    if airline:
-        run_browser(f'type @airline "{airline}"')
-        time.sleep(0.3)
-    
-    return True
-
-
-def submit_search() -> bool:
-    """Submit the search form and wait for results."""
-    # Click search button
-    run_browser('click @search')
-    
-    # Wait for results to load
-    time.sleep(3)
-    
-    # Check for results table
-    snapshot = run_browser("snapshot -c")
-    
-    # Look for indicators that results loaded
-    if "results" in snapshot.lower() or "availability" in snapshot.lower():
-        return True
-    
-    # Try clicking any "Search" button by text
-    run_browser('click "Search"')
-    time.sleep(3)
-    
-    return True
-
-
-def ensure_browser_ready() -> bool:
+async def ensure_browser_ready() -> bool:
     """Ensure browser is ready with our profile."""
     ensure_cache_dir()
     
-    # Close any existing browser to ensure we use our profile
-    run_browser("close")
-    time.sleep(1)
+    # Close any existing browser
+    await run_browser("close", timeout=5)
+    await asyncio.sleep(1)
     
-    # Open ExpertFlyer with our persistent profile
-    output = run_browser(f'--headed open "{EF_BASE}"')
-    if "ERROR" in output:
+    # Open ExpertFlyer (headed mode to avoid CloudFront blocks)
+    output = await run_browser(f'open "{EF_BASE}"', headed=True)
+    if "ERROR" in output and "403" in output:
         print(f"Failed to start browser: {output}", file=sys.stderr)
         return False
     
-    time.sleep(2)
+    await asyncio.sleep(2)
     return True
 
 
-def ensure_logged_in() -> bool:
+async def ensure_logged_in() -> bool:
     """Ensure we're logged in, logging in if necessary."""
-    # Start browser with persistent profile
-    if not ensure_browser_ready():
+    if not await ensure_browser_ready():
         return False
     
-    # Check if already logged in (session persisted in profile)
-    if is_logged_in():
+    if await is_logged_in():
         print("✅ Already logged in (session restored)", file=sys.stderr)
         save_session()
         return True
     
-    return login()
+    return await login()
 
 
 def build_search_url(
@@ -332,8 +244,6 @@ def build_search_url(
     """Build direct ExpertFlyer search results URL."""
     from urllib.parse import quote
     
-    # Format date as ISO with time
-    # Input: YYYY-MM-DD, Output: YYYY-MM-DDT00:00
     date_param = f"{date}T00:00"
     
     params = [
@@ -352,40 +262,69 @@ def build_search_url(
     return f"{EF_BASE}/air/availability/results?{'&'.join(params)}"
 
 
-def search_availability(
+async def search_availability(
     origin: str,
     destination: str,
     date: str,
     airline: Optional[str] = None,
 ) -> str:
     """
-    Complete flow: ensure logged in → navigate directly to results URL.
+    Complete flow: ensure logged in → navigate to results URL.
     
-    Uses direct URL navigation instead of form filling (much more reliable).
-    
-    Returns the page snapshot for parsing by scraper.py
+    Returns the page snapshot for parsing.
     """
-    # Ensure we're logged in
-    if not ensure_logged_in():
-        raise RuntimeError("Failed to log into ExpertFlyer")
     
-    # Build and navigate to results URL directly
-    url = build_search_url(origin, destination, date, airline)
-    print(f"🔗 {url}", file=sys.stderr)
+    async def _do_search():
+        # Ensure we're logged in
+        if not await ensure_logged_in():
+            raise RuntimeError("Failed to log into ExpertFlyer")
+        
+        # Build and navigate to results URL
+        url = build_search_url(origin, destination, date, airline)
+        print(f"🔗 {url}", file=sys.stderr)
+        
+        output = await run_browser(f'navigate "{url}"')
+        if "ERROR" in output:
+            raise RuntimeError(f"Navigation failed: {output}")
+        
+        # Wait for results
+        await asyncio.sleep(4)
+        
+        # Return snapshot
+        return await run_browser("snapshot -c")
     
-    output = run_browser(f'navigate "{url}"')
-    if "ERROR" in output:
-        raise RuntimeError(f"Navigation failed: {output}")
-    
-    # Wait for results to load
-    time.sleep(4)
-    
-    # Return page snapshot for parsing
-    return run_browser("snapshot -c")
+    try:
+        return await asyncio.wait_for(_do_search(), timeout=SEARCH_TIMEOUT)
+    except asyncio.TimeoutError:
+        raise RuntimeError("Search timed out")
+
+
+# Sync wrappers for CLI compatibility
+def search_availability_sync(
+    origin: str,
+    destination: str,
+    date: str,
+    airline: Optional[str] = None,
+) -> str:
+    """Synchronous wrapper for search_availability."""
+    return asyncio.run(search_availability(origin, destination, date, airline))
+
+
+def login_sync(force: bool = False) -> bool:
+    """Synchronous wrapper for login."""
+    return asyncio.run(login(force))
+
+
+def is_logged_in_sync() -> bool:
+    """Synchronous wrapper for is_logged_in."""
+    async def _check():
+        await run_browser(f'open "{EF_BASE}"')
+        await asyncio.sleep(2)
+        return await is_logged_in()
+    return asyncio.run(_check())
 
 
 if __name__ == "__main__":
-    # Quick test
     import argparse
     
     parser = argparse.ArgumentParser(description="ExpertFlyer browser automation")
@@ -399,14 +338,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.action == "login":
-        success = login(force=args.force)
+        success = login_sync(force=args.force)
         sys.exit(0 if success else 1)
     
     elif args.action == "check":
-        # Check login status
-        run_browser(f"open {EF_BASE}")
-        time.sleep(2)
-        logged_in = is_logged_in()
+        logged_in = is_logged_in_sync()
         print(f"Logged in: {logged_in}")
         sys.exit(0 if logged_in else 1)
     
@@ -415,10 +351,14 @@ if __name__ == "__main__":
             print("--origin, --destination, and --date required for search")
             sys.exit(1)
         
-        snapshot = search_availability(
-            args.origin,
-            args.destination,
-            args.date,
-            args.airline
-        )
-        print(snapshot)
+        try:
+            snapshot = search_availability_sync(
+                args.origin,
+                args.destination,
+                args.date,
+                args.airline
+            )
+            print(snapshot)
+        except RuntimeError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)

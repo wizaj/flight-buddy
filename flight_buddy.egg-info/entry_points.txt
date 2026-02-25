@@ -1,0 +1,2 @@
+[console_scripts]
+fb = src.cli:cli

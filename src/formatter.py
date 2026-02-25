@@ -574,6 +574,308 @@ def _seat_map_to_dict(seat_map: SeatMap, cabin_filter: Optional[str] = None) -> 
 # Errors
 # ─────────────────────────────────────────────────────────────
 
+# ─────────────────────────────────────────────────────────────
+# ATF (Award Travel Finder) Output
+# ─────────────────────────────────────────────────────────────
+
+def _fmt_points(pts) -> str:
+    """Format points with comma separator, or dash if None/0."""
+    if pts is None or pts == 0:
+        return "—"
+    return f"{pts:,}"
+
+
+def _cabin_marker(cab: dict) -> str:
+    """Format a cabin availability cell: ✓ points or ✗."""
+    if cab.get("available"):
+        pts = _fmt_points(cab.get("points"))
+        seats = cab.get("seats", 0)
+        seat_str = f"({seats})" if seats and seats > 0 else ""
+        return f"✓ {pts}{seat_str}"
+    return "✗"
+
+
+def print_atf_monthly(data: dict, origin: str, dest: str, airline: str, cabin_filter: Optional[str] = None):
+    """Print monthly availability calendar."""
+    from .providers.atf.adapter import display_name, resolve_airline
+
+    resolved = resolve_airline(airline)
+    name = display_name(resolved)
+
+    route = data.get("route", f"{origin} -> {dest}")
+    month_label = data.get("month", "")
+    availability = data.get("availability", [])
+
+    console.print(f"\n✈  [bold cyan]{name}: {route}[/bold cyan]  •  {month_label}\n")
+
+    if not availability:
+        console.print("  [yellow]No availability data returned.[/yellow]\n")
+        return
+
+    # Determine which cabins to show
+    cabin_keys = ["economy", "premium_economy", "business", "first"]
+    if cabin_filter:
+        cf = cabin_filter.lower().replace(" ", "_")
+        # Map shortcuts
+        cabin_map = {"y": "economy", "w": "premium_economy", "j": "business", "f": "first",
+                     "eco": "economy", "premium": "premium_economy", "biz": "business"}
+        cf = cabin_map.get(cf, cf)
+        cabin_keys = [k for k in cabin_keys if k == cf]
+
+    col_labels = {"economy": "Economy", "premium_economy": "Prem Eco",
+                  "business": "Business", "first": "First"}
+
+    # Header
+    header = f"  {'Date':<12}"
+    for ck in cabin_keys:
+        header += f"  {col_labels.get(ck, ck):>16}"
+    header += "  Peak"
+    console.print(f"[dim]{header}[/dim]")
+    console.print(f"  {'─' * (12 + 18 * len(cabin_keys) + 6)}")
+
+    for day in availability:
+        date_str = day.get("date", "?")
+        cabins = day.get("cabins", {})
+        peak = day.get("peak", False)
+
+        row = f"  {date_str:<12}"
+        has_any = False
+        for ck in cabin_keys:
+            cab = cabins.get(ck, {})
+            cell = _cabin_marker(cab)
+            if cab.get("available"):
+                has_any = True
+            row += f"  {cell:>16}"
+        row += f"  {'⚡' if peak else ''}"
+
+        # Color available rows green-ish
+        style = "" if has_any else "dim"
+        console.print(row, style=style)
+
+    console.print()
+    console.print("  [dim]✓ = available (points shown per person, one-way)  ✗ = unavailable  ⚡ = peak[/dim]")
+    console.print()
+
+
+def print_atf_daily(data: dict, origin: str, dest: str, airline: str):
+    """Print daily flight-by-flight availability."""
+    from .providers.atf.adapter import display_name, resolve_airline
+
+    resolved = resolve_airline(airline)
+    name = display_name(resolved)
+
+    response_type = data.get("response_type", "")
+    route = data.get("route", f"{origin} -> {dest}")
+    search_date = data.get("search_date", "")
+
+    console.print(f"\n✈  [bold cyan]{name}: {route}[/bold cyan]  •  {search_date}\n")
+
+    if response_type == "flights":
+        flights = data.get("flights", [])
+        if not flights:
+            console.print("  [yellow]No flights found.[/yellow]\n")
+            return
+
+        for fl in flights:
+            segments = fl.get("segments", [])
+            seg_str = " → ".join(
+                f"{s.get('flight_number', '?')} {s.get('from', '')}→{s.get('to', '')}"
+                for s in segments
+            )
+            duration = fl.get("duration", "")
+            overnight = " 🌙" if fl.get("overnight") else ""
+
+            console.print(f"  [bold]{seg_str}[/bold]  {duration}{overnight}")
+
+            cabins = fl.get("cabins", {})
+            for ck in ["economy", "premium_economy", "business", "first"]:
+                cab = cabins.get(ck, {})
+                if cab.get("available"):
+                    pts = _fmt_points(cab.get("points"))
+                    seats = cab.get("seats", 0)
+                    tax = cab.get("taxes")
+                    tax_cur = cab.get("taxes_currency", "")
+                    tax_str = f" + {tax_cur}{tax}" if tax else ""
+                    console.print(
+                        f"    [green]✓[/green] {ck.replace('_', ' ').title():<16} "
+                        f"{pts:>8} pts  ({seats} seats){tax_str}"
+                    )
+                else:
+                    console.print(f"    [dim]✗ {ck.replace('_', ' ').title()}[/dim]")
+            console.print()
+
+    elif response_type == "calendar":
+        # Single-day calendar response
+        avail = data.get("availability", {})
+        cabins = avail.get("cabins", {})
+        peak = avail.get("peak", False)
+        peak_str = " [yellow]PEAK[/yellow]" if peak else ""
+
+        console.print(f"  {avail.get('date', search_date)}{peak_str}\n")
+        for ck in ["economy", "premium_economy", "business", "first"]:
+            cab = cabins.get(ck, {})
+            marker = _cabin_marker(cab)
+            console.print(f"    {ck.replace('_', ' ').title():<20} {marker}")
+        console.print()
+    else:
+        console.print(f"  [dim]Unknown response type: {response_type}[/dim]")
+        console.print(f"  {json.dumps(data, indent=2)[:500]}\n")
+
+
+def print_atf_pricing(data: dict, origin: str, dest: str, airline: str):
+    """Print pricing chart."""
+    from .providers.atf.adapter import display_name, resolve_airline
+
+    resolved = resolve_airline(airline)
+    name = display_name(resolved)
+
+    route = data.get("route", f"{origin} -> {dest}")
+    currency = data.get("currency", "Points")
+    pricing = data.get("pricing", {})
+
+    console.print(f"\n✈  [bold cyan]{name}: {route}[/bold cyan]  •  {currency}\n")
+
+    table = Table(show_header=True, header_style="bold", box=None)
+    table.add_column("Cabin")
+    table.add_column("Off-Peak", justify="right")
+    table.add_column("Peak", justify="right")
+    table.add_column("Taxes (Off)", justify="right")
+    table.add_column("Taxes (Peak)", justify="right")
+
+    for ck in ["economy", "premium_economy", "business", "first"]:
+        p = pricing.get(ck, {})
+        table.add_row(
+            ck.replace("_", " ").title(),
+            _fmt_points(p.get("off_peak")),
+            _fmt_points(p.get("peak")),
+            str(p.get("taxes_off_peak", "—")),
+            str(p.get("taxes_peak", "—")),
+        )
+
+    console.print(table)
+    console.print()
+
+
+def print_atf_airports(data, airline: str):
+    """Print airports list."""
+    from .providers.atf.adapter import display_name, resolve_airline
+
+    resolved = resolve_airline(airline)
+    name = display_name(resolved)
+
+    console.print(f"\n✈  [bold cyan]{name} — Served Airports[/bold cyan]\n")
+
+    if isinstance(data, list):
+        for item in sorted(data, key=lambda x: x if isinstance(x, str) else str(x)):
+            console.print(f"  {item}")
+    elif isinstance(data, dict):
+        airports = data.get("airports", data)
+        if isinstance(airports, list):
+            for a in airports:
+                if isinstance(a, dict):
+                    console.print(f"  {a.get('code', '?'):>4}  {a.get('name', '')}")
+                else:
+                    console.print(f"  {a}")
+        else:
+            console.print(f"  {json.dumps(data, indent=2)[:1000]}")
+    console.print()
+
+
+def print_atf_airlines(data):
+    """Print supported airlines."""
+    console.print("\n✈  [bold cyan]Supported Airlines (AwardTravelFinder)[/bold cyan]\n")
+
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                console.print(f"  • {item.get('name', item.get('id', str(item)))}")
+            else:
+                console.print(f"  • {item}")
+    elif isinstance(data, dict):
+        airlines = data.get("airlines", data)
+        if isinstance(airlines, list):
+            for a in airlines:
+                console.print(f"  • {a}")
+        else:
+            console.print(f"  {json.dumps(data, indent=2)[:1000]}")
+    console.print()
+
+
+def print_atf_programs(data):
+    """Print loyalty programs."""
+    console.print("\n✈  [bold cyan]Loyalty Programs[/bold cyan]\n")
+
+    programs = data if isinstance(data, list) else data.get("programs", [data])
+
+    table = Table(show_header=True, header_style="bold", box=None)
+    table.add_column("Program")
+    table.add_column("Currency")
+    table.add_column("Hub(s)")
+    table.add_column("Destinations", justify="right")
+
+    for p in programs:
+        if isinstance(p, dict):
+            table.add_row(
+                p.get("name", "?"),
+                p.get("currency", "?"),
+                p.get("hub", p.get("hubs", "?")),
+                str(p.get("destinations", p.get("destination_count", "?"))),
+            )
+        else:
+            table.add_row(str(p), "", "", "")
+
+    console.print(table)
+    console.print()
+
+
+def print_atf_rates(data, program: str):
+    """Print program award rates."""
+    console.print(f"\n✈  [bold cyan]Award Chart: {program}[/bold cyan]\n")
+
+    rates = data if isinstance(data, list) else data.get("rates", data.get("destinations", [data]))
+
+    if isinstance(rates, list) and rates:
+        # Try to format as table
+        sample = rates[0] if rates else {}
+        if isinstance(sample, dict) and any(k in sample for k in ["destination", "economy", "business"]):
+            table = Table(show_header=True, header_style="bold", box=None)
+            table.add_column("Destination")
+            table.add_column("Economy", justify="right")
+            table.add_column("Prem Eco", justify="right")
+            table.add_column("Business", justify="right")
+            table.add_column("First", justify="right")
+
+            for r in rates:
+                dest = r.get("destination", r.get("name", "?"))
+                if isinstance(dest, dict):
+                    dest = dest.get("name", dest.get("code", "?"))
+
+                def _pts(cabin_key):
+                    v = r.get(cabin_key)
+                    if isinstance(v, dict):
+                        off = v.get("off_peak", v.get("points"))
+                        peak = v.get("peak")
+                        if off and peak and off != peak:
+                            return f"{_fmt_points(off)}/{_fmt_points(peak)}"
+                        return _fmt_points(off or peak)
+                    return _fmt_points(v)
+
+                table.add_row(
+                    str(dest),
+                    _pts("economy"),
+                    _pts("premium_economy"),
+                    _pts("business"),
+                    _pts("first"),
+                )
+
+            console.print(table)
+        else:
+            console.print(json.dumps(rates, indent=2)[:2000])
+    elif isinstance(rates, dict):
+        console.print(json.dumps(rates, indent=2)[:2000])
+    console.print()
+
+
 def print_error(message: str, details: Optional[list] = None):
     """Print error message."""
     console.print(f"\n[red bold]Error:[/red bold] {message}")
